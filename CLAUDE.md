@@ -153,7 +153,12 @@ runs only when the week page shows (a good result is kept two minutes);
 - Desktop notification at cut-off and when under the bedtime limit.
 - Bar option showing "cut-off in 2 h 14 min".
 - CSV export.
-- Publish to GitHub as `sonderbydk/omacaffeine` (README already assumes it).
+- List on plugins.omarchy.org: issue form in omacom/omarchy-plugin-marketplace
+  (category Widgets, tags Bar + Quickshell + AI, `preview.png` at root is
+  picked up automatically). Repo is live at github.com/sonderbydk/omacaffeine,
+  v0.4.0 released 2026-09-13. Screenshots in `screenshots/` were taken with
+  a demo week (`dev`-style: back up log.json, write demo drinks, shoot,
+  restore); today's drinks in them are real.
 
 Done in 0.4.0: custom drinks + per-preset mg overrides, week page with
 agent tokens, click-to-backdate on the graph, flash over the cup.
