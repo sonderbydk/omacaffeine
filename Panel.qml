@@ -24,6 +24,10 @@ Panel {
   // ---- state -------------------------------------------------------------
   property var log: Model.emptyLog()
   property var drinksConfig: Model.emptyDrinksConfig()
+  // Nothing is written back until the file has been read once: writing an
+  // empty in-memory log over a real one would erase the day.
+  property bool logLoaded: false
+  property bool drinksLoaded: false
   property date now: new Date()
   property string page: "main"          // "main" | "settings" | "week" | "drink"
   property int seed: Math.floor(Math.random() * 1000)
@@ -241,7 +245,7 @@ Panel {
     if (d.custom) entry.icon = d.icon
     next.drinks.push(entry)
     next.lastKind = d.kind
-    commitLog(next)
+    if (!commitLog(next)) return false
     lastLogged = entry
     pickTime = null
     showFlash(d.name + (backdated ? " logged at " + Model.formatTime(when, timeFmt) : " logged")
@@ -289,9 +293,15 @@ Panel {
   }
 
   function commitLog(next) {
+    if (!logLoaded) {
+      showFlash("Log not loaded yet · try again in a second")
+      logFile.reload()
+      return false
+    }
     now = new Date()
     log = Model.pruneLog(next, now)
     logFile.setText(Model.serializeLog(log))
+    return true
   }
 
   function showFlash(text) {
@@ -302,8 +312,14 @@ Panel {
 
   // ---- drinks: custom drinks and overrides --------------------------------
   function commitDrinks(next) {
+    if (!drinksLoaded) {
+      showFlash("Drinks file not loaded yet · try again in a second")
+      drinksFile.reload()
+      return false
+    }
     drinksConfig = next
     drinksFile.setText(Model.serializeDrinksConfig(next))
+    return true
   }
 
   function openEditor(kind) {
@@ -449,8 +465,19 @@ Panel {
     printErrors: false
     atomicWrites: true
     onFileChanged: reload()
-    onLoaded: root.log = Model.pruneLog(Model.parseLog(text()), new Date())
-    onLoadFailed: root.log = Model.emptyLog()
+    onLoaded: {
+      root.log = Model.pruneLog(Model.parseLog(text()), new Date())
+      root.logLoaded = true
+    }
+    // A missing file on first load is a fresh install. Any other failure,
+    // or a transient miss during our own atomic rename, keeps what is in
+    // memory and keeps writes blocked.
+    onLoadFailed: function(error) {
+      if (error === FileViewError.FileNotFound && !root.logLoaded) {
+        root.log = Model.emptyLog()
+        root.logLoaded = true
+      }
+    }
   }
 
   FileView {
@@ -460,8 +487,16 @@ Panel {
     printErrors: false
     atomicWrites: true
     onFileChanged: reload()
-    onLoaded: root.drinksConfig = Model.parseDrinksConfig(text())
-    onLoadFailed: root.drinksConfig = Model.emptyDrinksConfig()
+    onLoaded: {
+      root.drinksConfig = Model.parseDrinksConfig(text())
+      root.drinksLoaded = true
+    }
+    onLoadFailed: function(error) {
+      if (error === FileViewError.FileNotFound && !root.drinksLoaded) {
+        root.drinksConfig = Model.emptyDrinksConfig()
+        root.drinksLoaded = true
+      }
+    }
   }
 
   FileView {
