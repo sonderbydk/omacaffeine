@@ -237,7 +237,7 @@ var QUOTES = [
   "Good code is written on caffeine.",
   "caffeine × tokens = production",
   "while (!asleep) { coffee++; }",
-  "sudo brew install focus",
+  "make focus: *** No rule to make target. Try coffee.",
   "Half-life: about five hours. Uptime: as long as the pot lasts.",
   "Caffeine: the original hot-reload.",
   "There is no cloud, just someone else's espresso machine.",
