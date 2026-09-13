@@ -111,10 +111,56 @@ Item {
       "M9 8 L10.5 16",
       "M12 7 L12.5 16.5",
       "M15 8 L14 16"
+    ],
+    // Nitro: a tall can with a nitrogen widget bubble trail.
+    "nitro": [
+      "M8 4.5 H16 V19.5 A2 2 0 0 1 14 21.5 H10 A2 2 0 0 1 8 19.5 Z",
+      "M8 4.5 C8 3 9 2.5 10 2.5 H14 C15 2.5 16 3 16 4.5",
+      "M10.5 17.5 A1 1 0 1 0 10.5 15.5 A1 1 0 1 0 10.5 17.5 Z",
+      "M13.5 13.5 A1 1 0 1 0 13.5 11.5 A1 1 0 1 0 13.5 13.5 Z",
+      "M11 9.5 A1 1 0 1 0 11 7.5 A1 1 0 1 0 11 9.5 Z"
+    ],
+    // Generic vessels for custom drinks.
+    "mug": [
+      "M4 8 H17 V16 A4 4 0 0 1 13 20 H8 A4 4 0 0 1 4 16 Z",
+      "M17 10 H18.5 A3 3 0 0 1 18.5 16 H17"
+    ],
+    "tumbler": [
+      "M7 7 H17 L16 21 H8 Z",
+      "M5.5 7 H18.5 V4.5 H5.5 Z",
+      "M13.5 4.5 V2.5 H15.5",
+      "M8 12 H16"
+    ],
+    "bottle": [
+      "M10 2.5 H14 V6 C14 8 16 8.5 16 11 V20 A1.5 1.5 0 0 1 14.5 21.5 H9.5 A1.5 1.5 0 0 1 8 20 V11 C8 8.5 10 8 10 6 Z",
+      "M9.5 2.5 H14.5",
+      "M8 13 H16",
+      "M8 17 H16"
+    ],
+    "shot": [
+      "M8 7 H16 L14.8 20 H9.2 Z",
+      "M6.5 7 H17.5",
+      "M9 14 H15"
+    ],
+    "mate": [
+      "M7 10 C5 13 5.5 20 12 20 C18.5 20 19 13 17 10 C16 8.5 8 8.5 7 10 Z",
+      "M8 13.5 C10 12.5 14 12.5 16 13.5",
+      "M13.5 9 L18.5 3",
+      "M17 2 L20 5"
+    ],
+    "chocolate": [
+      "M4 5 H20 V19 H4 Z",
+      "M9.3 5 V19",
+      "M14.6 5 V19",
+      "M4 12 H20"
+    ],
+    "pill": [
+      "M4.5 14.5 L14.5 4.5 A3.54 3.54 0 0 1 19.5 9.5 L9.5 19.5 A3.54 3.54 0 0 1 4.5 14.5 Z",
+      "M9.5 9.5 L14.5 14.5"
     ]
   })
 
-  readonly property var activePaths: paths[kind] || paths["coffee"]
+  readonly property var activePaths: paths[kind] || paths["mug"]
 
   Shape {
     id: shape

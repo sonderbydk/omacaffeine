@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "id": "io.github.sonderbydk.omacaffeine",
   "name": "OmaCaffeine",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "author": "Peter Sønderby",
   "license": "MIT",
-  "description": "Caffeine tracker for the Omarchy bar: log your espresso, tea or energy drink, watch the cup fill up, and know when to stop so you still sleep tonight.",
+  "description": "Caffeine tracker for the Omarchy bar: log your espresso, tea or energy drink (or your own), watch the cup fill up, know when to stop so you still sleep tonight, and see how the week's milligrams line up with your agents' tokens.",
   "kinds": [
     "bar-widget"
   ],

@@ -20,6 +20,24 @@ Item {
   property string fontFamily: Style.font.family
   property string timeFormat: ""
 
+  // Backdating: hovering shows the time under the pointer, a click emits
+  // `picked` with that time (snapped to five minutes, never after now).
+  // `pickTime` is the time the owner is currently logging at, drawn as a
+  // marker until it is cleared.
+  property bool pickable: true
+  property var pickTime: null
+  property var hoverTime: null
+  signal picked(var time)
+
+  function timeAt(x) {
+    var from = window.from.getTime(), to = window.to.getTime()
+    var plotW = width - axisLeft
+    if (plotW <= 0 || x < axisLeft) return null
+    var t = from + (x - axisLeft) / plotW * (to - from)
+    if (t > now.getTime()) return null
+    return Model.snapTime(new Date(t), now, 5)
+  }
+
   // New cells fade in when the drink list changes.
   property var previousLevels: null
   property var lastLevels: null
@@ -88,6 +106,23 @@ Item {
   onWidthChanged: canvas.requestPaint()
   onHeightChanged: canvas.requestPaint()
   onVisibleChanged: if (visible) canvas.requestPaint()
+  onPickTimeChanged: canvas.requestPaint()
+  onHoverTimeChanged: canvas.requestPaint()
+
+  MouseArea {
+    anchors.fill: parent
+    enabled: root.pickable
+    hoverEnabled: true
+    cursorShape: root.hoverTime ? Qt.PointingHandCursor : Qt.ArrowCursor
+    onPositionChanged: function(mouse) {
+      var t = root.timeAt(mouse.x)
+      var same = (t === null && root.hoverTime === null)
+        || (t !== null && root.hoverTime !== null && t.getTime() === root.hoverTime.getTime())
+      if (!same) root.hoverTime = t
+    }
+    onExited: root.hoverTime = null
+    onClicked: function(mouse) { root.picked(root.timeAt(mouse.x)) }
+  }
 
   Canvas {
     id: canvas
@@ -185,6 +220,32 @@ Item {
       }
       vline(nowT, ac, "now")
       vline(bedT, Qt.rgba(fg.r, fg.g, fg.b, 0.85), "bed " + Model.formatTime(root.bedtime, root.timeFormat))
+
+      // Backdating markers: the pointer's time (dim) and the picked time
+      // (accent, solid) sit low so they never fight the "now" label.
+      function marker(date, color, solid) {
+        if (!date) return
+        var tt = date.getTime()
+        if (tt < from || tt > to) return
+        var mx = plotX + Math.round((tt - from) / span * plotW) + 0.5
+        ctx.strokeStyle = color
+        ctx.lineWidth = solid ? 2 : 1
+        ctx.setLineDash(solid ? [] : [1, 3])
+        ctx.beginPath()
+        ctx.moveTo(mx, 0)
+        ctx.lineTo(mx, plotH)
+        ctx.stroke()
+        ctx.setLineDash([])
+        ctx.fillStyle = color
+        ctx.font = (solid ? "bold " : "") + Style.font.caption + "px " + root.fontFamily
+        ctx.textBaseline = "bottom"
+        var label = (solid ? "log at " : "") + Model.formatTime(date, root.timeFormat)
+        var lw = ctx.measureText(label).width
+        var lx = mx + 4 + lw > width ? mx - lw - 4 : mx + 4
+        ctx.fillText(label, lx, plotH - 2)
+      }
+      if (root.pickTime) marker(root.pickTime, ac, true)
+      else if (root.hoverTime) marker(root.hoverTime, Qt.rgba(fg.r, fg.g, fg.b, 0.7), false)
 
       // Drink ticks along the baseline.
       ctx.fillStyle = fg

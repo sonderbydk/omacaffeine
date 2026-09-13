@@ -12,7 +12,7 @@ ShellRoot {
     title: "OmaCaffeine harness"
     color: Color.background
     implicitWidth: 760
-    implicitHeight: 620
+    implicitHeight: 680
     visible: true
 
     property real lvl: 0.3
@@ -86,12 +86,12 @@ ShellRoot {
         columnSpacing: 22
         rowSpacing: 8
         Repeater {
-          model: Model.PRESETS
+          model: Model.ICON_KINDS
           Column {
             required property var modelData
             spacing: 3
-            DrinkIcon { anchors.horizontalCenter: parent.horizontalCenter; kind: modelData.kind; size: 36; color: Color.foreground; strokeWidth: 1.5 }
-            Text { anchors.horizontalCenter: parent.horizontalCenter; text: modelData.name; color: Color.foreground; font.family: Style.font.family; font.pixelSize: 11 }
+            DrinkIcon { anchors.horizontalCenter: parent.horizontalCenter; kind: modelData; size: 36; color: Color.foreground; strokeWidth: 1.5 }
+            Text { anchors.horizontalCenter: parent.horizontalCenter; text: modelData; color: Color.foreground; font.family: Style.font.family; font.pixelSize: 11 }
           }
         }
       }

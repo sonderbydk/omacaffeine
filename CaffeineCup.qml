@@ -15,6 +15,8 @@ Item {
   property string fontFamily: Style.font.family
   property string label: ""
   property string sublabel: ""
+  // Off for the small week cups: the steam stands still and no timer runs.
+  property bool animated: true
 
   readonly property real clampedLevel: Math.max(0, Math.min(1, level))
   readonly property bool overLimit: level > 1
@@ -54,7 +56,7 @@ Item {
 
   Timer {
     interval: root.overLimit ? 45 : 70
-    running: root.visible && root.steaming
+    running: root.visible && root.steaming && root.animated
     repeat: true
     onTriggered: {
       root.phase = (root.phase + (root.overLimit ? 0.32 : 0.08)) % (Math.PI * 2)

@@ -21,7 +21,17 @@ var PRESETS = [
   { kind: "matcha",     name: "Matcha",     mg: 70,  serving: "2 g · 1 bowl" },
   { kind: "cola",       name: "Cola",       mg: 32,  serving: "1 can · 330 ml" },
   { kind: "red-bull",   name: "Red Bull",   mg: 80,  serving: "1 can · 250 ml" },
-  { kind: "monster",    name: "Monster",    mg: 160, serving: "1 can · 500 ml" }
+  { kind: "monster",    name: "Monster",    mg: 160, serving: "1 can · 500 ml" },
+  { kind: "nitro",      name: "Nitro",      mg: 215, serving: "Nitro cold brew · 350 ml" }
+]
+
+// Every outline DrinkIcon knows, for the custom-drink icon picker: the
+// presets' own icons first, then a few generic vessels.
+var ICON_KINDS = [
+  "espresso", "doppio", "americano", "cappuccino", "latte", "flat-white",
+  "coffee", "cold-brew", "decaf", "black-tea", "green-tea", "matcha",
+  "cola", "red-bull", "monster", "nitro",
+  "mug", "tumbler", "bottle", "shot", "mate", "chocolate", "pill"
 ]
 
 var ACTIVITIES = ["Sitting", "Standing", "Moving around"]
@@ -58,6 +68,23 @@ var HEADINGS = [
   "Deploy a beverage to production (you)",
   "Your next token generator",
   "Hydrate the neural net"
+]
+
+// Shown while a time on the graph is selected and a drink is awaited.
+var BACKDATE_HEADINGS = [
+  "Retroactive commit · pick the drink you forgot",
+  "git rebase -i your morning · which cup was it?",
+  "Time travel enabled · choose the cup",
+  "Backfilling the log · what did you drink?",
+  "Cherry-pick a drink into the past"
+]
+
+var WEEK_HEADINGS = [
+  "Seven days of uptime",
+  "Weekly sprint retrospective",
+  "The week in milligrams",
+  "Your caffeine changelog",
+  "Last seven builds"
 ]
 
 var QUOTES = [
@@ -100,6 +127,106 @@ function preset(kind) {
   for (var i = 0; i < PRESETS.length; i++)
     if (PRESETS[i].kind === kind) return PRESETS[i]
   return PRESETS[0]
+}
+
+function isPreset(kind) {
+  for (var i = 0; i < PRESETS.length; i++)
+    if (PRESETS[i].kind === kind) return true
+  return false
+}
+
+// ---- drinks config: custom drinks and per-preset mg overrides ---------------
+//
+// Lives in ~/.config/omacaffeine/drinks.json:
+//   { version: 1,
+//     custom: [{ kind: "custom-1694600000", name: "Batch brew", mg: 180, icon: "mug" }],
+//     overrides: { espresso: 126 } }
+
+function emptyDrinksConfig() {
+  return { version: 1, custom: [], overrides: {} }
+}
+
+function parseDrinksConfig(raw) {
+  var config = emptyDrinksConfig()
+  try {
+    var parsed = JSON.parse(String(raw || ""))
+    if (!parsed || typeof parsed !== "object") return config
+    if (Array.isArray(parsed.custom)) {
+      for (var i = 0; i < parsed.custom.length; i++) {
+        var c = parsed.custom[i]
+        if (!c || !c.kind || !isFinite(Number(c.mg))) continue
+        config.custom.push({ kind: String(c.kind), name: String(c.name || "My drink"),
+          mg: Math.max(0, Math.round(Number(c.mg))),
+          icon: ICON_KINDS.indexOf(String(c.icon)) >= 0 ? String(c.icon) : "mug" })
+      }
+    }
+    if (parsed.overrides && typeof parsed.overrides === "object") {
+      for (var kind in parsed.overrides) {
+        var mg = Number(parsed.overrides[kind])
+        if (isPreset(kind) && isFinite(mg) && mg >= 0 && Math.round(mg) !== preset(kind).mg)
+          config.overrides[kind] = Math.round(mg)
+      }
+    }
+  } catch (e) {}
+  return config
+}
+
+function serializeDrinksConfig(config) {
+  return JSON.stringify({ version: 1, custom: config.custom, overrides: config.overrides }, null, 2) + "\n"
+}
+
+function cloneDrinksConfig(config) {
+  return parseDrinksConfig(serializeDrinksConfig(config || emptyDrinksConfig()))
+}
+
+function newCustomKind() {
+  return "custom-" + Date.now().toString(36)
+}
+
+// The drink list the grid shows: presets with any mg override applied, then
+// the custom drinks. Each entry carries `icon` so the grid never has to know
+// which kind it is looking at.
+function allDrinks(config) {
+  var cfg = config || emptyDrinksConfig()
+  var list = []
+  for (var i = 0; i < PRESETS.length; i++) {
+    var p = PRESETS[i]
+    var overridden = cfg.overrides.hasOwnProperty(p.kind)
+    list.push({ kind: p.kind, name: p.name, icon: p.kind, serving: p.serving,
+      mg: overridden ? cfg.overrides[p.kind] : p.mg, defaultMg: p.mg,
+      overridden: overridden, custom: false })
+  }
+  for (var c = 0; c < cfg.custom.length; c++) {
+    var d = cfg.custom[c]
+    list.push({ kind: d.kind, name: d.name, icon: d.icon, serving: "Your own drink",
+      mg: d.mg, defaultMg: d.mg, overridden: false, custom: true })
+  }
+  return list
+}
+
+// Effective drink for `kind`: a preset (with override), a custom drink, or
+// the first preset when the kind is unknown.
+function drink(kind, config) {
+  var list = allDrinks(config)
+  for (var i = 0; i < list.length; i++)
+    if (list[i].kind === kind) return list[i]
+  return list[0]
+}
+
+function overrideCount(config) {
+  var n = 0
+  for (var k in (config || emptyDrinksConfig()).overrides) n++
+  return n
+}
+
+// Icon to draw for a logged drink: custom drinks remember their icon on the
+// log entry, presets are their own icon, unknown kinds get a plain mug.
+function iconFor(entry, config) {
+  if (!entry) return "mug"
+  if (entry.icon && ICON_KINDS.indexOf(String(entry.icon)) >= 0) return String(entry.icon)
+  if (isPreset(entry.kind)) return String(entry.kind)
+  var d = drink(entry.kind, config)
+  return d && d.kind === entry.kind ? d.icon : "mug"
 }
 
 function halfLifeHours(activity) {
@@ -183,6 +310,21 @@ function usesImperialWeight() {
 
 function kgToLb(kg) { return Math.round(Number(kg) * 2.20462) }
 function lbToKg(lb) { return Math.round(Number(lb) / 2.20462) }
+
+function formatTokens(n) {
+  var v = Math.max(0, Number(n) || 0)
+  if (v >= 1e6) return (v / 1e6).toFixed(v >= 1e7 ? 0 : 1) + "M"
+  if (v >= 1e3) return (v / 1e3).toFixed(v >= 1e4 ? 0 : 1) + "k"
+  return String(Math.round(v))
+}
+
+function dayLabel(date) {
+  try {
+    return Qt.formatDate(date, "ddd")
+  } catch (e) {
+    return ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][date.getDay()]
+  }
+}
 
 function formatDuration(ms) {
   var minutes = Math.max(0, Math.round(ms / 60000))
@@ -342,6 +484,131 @@ function timeline(drinks, from, to, stepMinutes, halfLifeHrs) {
   return points
 }
 
+// ---- week ------------------------------------------------------------------
+
+// One entry per calendar day, oldest first, ending today.
+function dayTotals(drinks, now, days) {
+  var list = []
+  var todayStart = startOfDay(now)
+  for (var i = days - 1; i >= 0; i--) {
+    var start = new Date(todayStart.getTime() - i * 24 * 3600 * 1000)
+    var end = new Date(start.getTime() + 24 * 3600 * 1000)
+    var mg = 0, count = 0
+    for (var d = 0; d < (drinks || []).length; d++) {
+      var t = drinkTime(drinks[d])
+      if (!t || t < start || t >= end) continue
+      mg += Number(drinks[d].mg) || 0
+      count++
+    }
+    list.push({ date: start, mg: Math.round(mg), count: count, label: dayLabel(start),
+      isToday: i === 0 })
+  }
+  return list
+}
+
+// Bucket key matching tokens.py: local "YYYY-MM-DDTHH".
+function hourKey(date) {
+  return date.getFullYear() + "-" + pad2(date.getMonth() + 1) + "-" + pad2(date.getDate())
+    + "T" + pad2(date.getHours())
+}
+
+function tokensForDay(hours, dayStart) {
+  var sum = 0
+  for (var h = 0; h < 24; h++)
+    sum += Number((hours || {})[hourKey(new Date(dayStart.getTime() + h * 3600000))]) || 0
+  return sum
+}
+
+function mean(values) {
+  if (!values.length) return 0
+  var sum = 0
+  for (var i = 0; i < values.length; i++) sum += values[i]
+  return sum / values.length
+}
+
+function pearson(xs, ys) {
+  var n = Math.min(xs.length, ys.length)
+  if (n < 3) return NaN
+  var mx = mean(xs), my = mean(ys)
+  var sxy = 0, sxx = 0, syy = 0
+  for (var i = 0; i < n; i++) {
+    var dx = xs[i] - mx, dy = ys[i] - my
+    sxy += dx * dy; sxx += dx * dx; syy += dy * dy
+  }
+  if (sxx <= 0 || syy <= 0) return NaN
+  return sxy / Math.sqrt(sxx * syy)
+}
+
+// Least-squares slope per step (per day when the input is daily).
+function slope(values) {
+  var n = values.length
+  if (n < 2) return 0
+  var mx = (n - 1) / 2, my = mean(values)
+  var sxy = 0, sxx = 0
+  for (var i = 0; i < n; i++) { sxy += (i - mx) * (values[i] - my); sxx += (i - mx) * (i - mx) }
+  return sxx > 0 ? sxy / sxx : 0
+}
+
+// Every hour in the window where the agents produced tokens, paired with
+// the caffeine in the body at the middle of that hour. Hours without tokens
+// are left out on purpose: they say "not at the keyboard", not "no output".
+function activeHours(drinks, hours, now, days, halfLifeHrs) {
+  var pairs = []
+  var from = startOfDay(now).getTime() - (days - 1) * 24 * 3600000
+  for (var t = from; t <= now.getTime(); t += 3600000) {
+    var start = new Date(t)
+    var tokens = Number((hours || {})[hourKey(start)]) || 0
+    if (tokens <= 0) continue
+    var mg = inBody(drinks, new Date(t + 1800000), halfLifeHrs)
+    pairs.push({ t: t, mg: mg, tokens: tokens })
+  }
+  return pairs
+}
+
+var MG_BUCKETS = [
+  { label: "0–50 mg", from: 0, to: 50 },
+  { label: "50–100 mg", from: 50, to: 100 },
+  { label: "100–150 mg", from: 100, to: 150 },
+  { label: "150–200 mg", from: 150, to: 200 },
+  { label: "200+ mg", from: 200, to: Infinity }
+]
+
+// Mean tokens per active hour, grouped by how much caffeine was in the
+// body. The bucket with the highest mean (and at least two hours behind
+// it) is the sweet spot.
+function tokenBuckets(pairs) {
+  var buckets = []
+  for (var b = 0; b < MG_BUCKETS.length; b++) {
+    var spec = MG_BUCKETS[b]
+    var values = []
+    for (var i = 0; i < pairs.length; i++)
+      if (pairs[i].mg >= spec.from && pairs[i].mg < spec.to) values.push(pairs[i].tokens)
+    buckets.push({ label: spec.label, hours: values.length, perHour: mean(values) })
+  }
+  return buckets
+}
+
+function sweetSpot(buckets) {
+  var best = null
+  for (var i = 0; i < buckets.length; i++)
+    if (buckets[i].hours >= 2 && (!best || buckets[i].perHour > best.perHour)) best = buckets[i]
+  return best
+}
+
+function describeCorrelation(r, n) {
+  if (isNaN(r) || n < 6) return "Not enough overlap yet · keep logging, keep prompting"
+  var strength = Math.abs(r) < 0.2 ? "no real" : (Math.abs(r) < 0.5 ? "a weak" : "a solid")
+  var direction = r > 0 ? "more caffeine, more tokens" : "more caffeine, fewer tokens"
+  if (Math.abs(r) < 0.2) direction = "the tokens don't care about the mg"
+  return "r = " + r.toFixed(2) + " over " + n + " active hours · " + strength + " link · " + direction
+}
+
+function describeTrend(perDay, unit, formatter) {
+  var fmt = formatter || function(v) { return Math.round(v) }
+  if (Math.abs(perDay) < 1e-9) return "flat"
+  return (perDay > 0 ? "󰁝 +" : "󰁅 −") + fmt(Math.abs(perDay)) + " " + unit + "/day"
+}
+
 // ---- misc ------------------------------------------------------------------
 
 function quote(seed) {
@@ -352,6 +619,21 @@ function quote(seed) {
 function heading(seed) {
   var index = Math.abs(Math.floor(Number(seed) || 0)) % HEADINGS.length
   return HEADINGS[index]
+}
+
+function backdateHeading(seed) {
+  return BACKDATE_HEADINGS[Math.abs(Math.floor(Number(seed) || 0)) % BACKDATE_HEADINGS.length]
+}
+
+function weekHeading(seed) {
+  return WEEK_HEADINGS[Math.abs(Math.floor(Number(seed) || 0)) % WEEK_HEADINGS.length]
+}
+
+// Round to the nearest `minutes`, never after `now`.
+function snapTime(date, now, minutes) {
+  var step = Math.max(1, minutes) * 60000
+  var t = Math.round(date.getTime() / step) * step
+  return new Date(Math.min(t, now.getTime()))
 }
 
 // The clock widget's format string from a shell.json document, or "".
@@ -383,8 +665,10 @@ function parseLog(raw) {
       for (var i = 0; i < parsed.drinks.length; i++) {
         var d = parsed.drinks[i]
         if (!d || !d.t || !isFinite(Number(d.mg))) continue
-        log.drinks.push({ t: String(d.t), kind: String(d.kind || "coffee"),
-          name: String(d.name || preset(d.kind).name), mg: Number(d.mg) })
+        var entry = { t: String(d.t), kind: String(d.kind || "coffee"),
+          name: String(d.name || preset(d.kind).name), mg: Number(d.mg) }
+        if (d.icon) entry.icon = String(d.icon)
+        log.drinks.push(entry)
       }
     }
     if (parsed.lastKind) log.lastKind = String(parsed.lastKind)
@@ -394,9 +678,11 @@ function parseLog(raw) {
   }
 }
 
-// Keep three days: enough for the decay model, small enough to stay tidy.
+// Keep eight days: a full week for the history page plus yesterday's tail
+// for the decay model.
+var KEEP_DAYS = 8
 function pruneLog(log, now) {
-  var keepFrom = now.getTime() - 3 * 24 * 3600 * 1000
+  var keepFrom = now.getTime() - KEEP_DAYS * 24 * 3600 * 1000
   var kept = []
   for (var i = 0; i < log.drinks.length; i++) {
     var t = drinkTime(log.drinks[i])

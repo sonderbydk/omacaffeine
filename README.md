@@ -17,11 +17,17 @@ Requires Omarchy 4. No extra packages.
 
 ## What it does
 
-- **One-click logging** of fifteen drinks — Espresso, Doppio, Americano,
+- **One-click logging** of sixteen drinks — Espresso, Doppio, Americano,
   Cappuccino, Latte, Flat White, Filter, Cold Brew, Decaf, Black Tea, Green
-  Tea, Matcha, Cola, Red Bull and Monster — each with a single-colour outline
-  icon that follows your theme. The most recent drink is highlighted;
+  Tea, Matcha, Cola, Red Bull, Monster and Nitro — each with a single-colour
+  outline icon that follows your theme. The most recent drink is highlighted;
   middle-click the bar icon or press Enter in the panel to log it again.
+- **Your own drinks.** The "+ Create my own" tiles take a name, the mg and
+  one of 23 icons. Right-click any preset to give it your own mg ("my
+  espresso is a double") and reset it to the default later; settings can
+  reset every preset at once.
+- **Forgot one?** Click the timeline where the cup should have been and pick
+  the drink; it lands in the log at that time and the graph redraws.
 - **The cup.** A mug that fills with coffee as today's intake approaches the
   daily limit, or, if you prefer, with what is in your system right now so it
   drains between cups. Empty at zero. Past the limit it goes into stack
@@ -36,6 +42,12 @@ Requires Omarchy 4. No extra packages.
 - **Timeline.** A pixel graph in your theme's colours: caffeine in your
   system so far, the predicted decay from now, the bedtime limit and bedtime
   itself.
+- **The week.** Its own page (chart icon): seven small cups with the mg and
+  cups per day, the average, the trend, and, underneath each day, the output
+  tokens your coding agents produced (Claude Code and Codex transcripts on
+  this machine). A second chart groups active hours by how much caffeine was
+  in your system and shows the tokens per hour for each band, so you can see
+  your sweet spot and the correlation. Correlation, not causation.
 - **Your clock, your units.** Times follow the Omarchy clock widget's format
   (24-hour unless your clock shows AM/PM) and weight is shown in pounds for
   imperial locales.
@@ -76,8 +88,10 @@ when `D > L - C`; otherwise the drink fits at any time before bed.
 | --- | --- |
 | Open / close | click the bar icon, or `omarchy shell -q io.github.sonderbydk.omacaffeine toggle` |
 | Log the latest drink again | middle-click the bar icon, Enter in the panel, or `omarchy shell -q io.github.sonderbydk.omacaffeine logLast` |
-| Log a specific drink | `omarchy shell -q io.github.sonderbydk.omacaffeine log espresso` (`coffee`, `black-tea`, `green-tea`, `matcha`, `cola`, `red-bull`, `monster`) |
+| Log a specific drink | `omarchy shell -q io.github.sonderbydk.omacaffeine log espresso` (any kind from `… drinks`, custom ones included) |
+| Log back in time | `omarchy shell -q io.github.sonderbydk.omacaffeine logAt espresso 09:00` |
 | Undo | `omarchy shell -q io.github.sonderbydk.omacaffeine undo` |
+| Week page | `omarchy shell -q io.github.sonderbydk.omacaffeine week` |
 | Status line | `omarchy shell io.github.sonderbydk.omacaffeine status` |
 
 A Hyprland binding for the espresso addict:
@@ -89,7 +103,11 @@ o.bind("SUPER + SHIFT + C", "Log espresso",
 
 ## Files
 
-- `~/.local/state/omacaffeine/log.json` — the drink log (last three days).
+- `~/.local/state/omacaffeine/log.json` — the drink log (last eight days).
+- `~/.config/omacaffeine/drinks.json` — your own drinks and preset mg overrides.
+- Token counts come from `~/.claude/projects/**/*.jsonl` and
+  `~/.codex/sessions/**/*.jsonl`, read locally by `tokens.py`; nothing leaves
+  the machine.
 - Settings live inline on the widget's entry in `~/.config/omarchy/shell.json`
   and can be changed with `omarchy bar set io.github.sonderbydk.omacaffeine bedtime 22:30`.
 

@@ -6,8 +6,9 @@ import qs.Ui
 import "Model.js" as Model
 
 // OmaCaffeine panel: log a drink, watch the cup fill, and see the cut-off
-// for tonight. State lives in ~/.local/state/omacaffeine/log.json; the
-// settings live inline on the bar entry in shell.json like every widget.
+// for tonight. State lives in ~/.local/state/omacaffeine/log.json, custom
+// drinks and mg overrides in ~/.config/omacaffeine/drinks.json; the settings
+// live inline on the bar entry in shell.json like every widget.
 Panel {
   id: root
   moduleName: "io.github.sonderbydk.omacaffeine"
@@ -22,18 +23,42 @@ Panel {
 
   // ---- state -------------------------------------------------------------
   property var log: Model.emptyLog()
+  property var drinksConfig: Model.emptyDrinksConfig()
   property date now: new Date()
-  property string page: "main"          // "main" | "settings"
+  property string page: "main"          // "main" | "settings" | "week" | "drink"
   property int seed: Math.floor(Math.random() * 1000)
   property string bedtimeDraft: ""
-  property string flash: ""
   property string clockFormat: ""
+
+  // The confirmation over the cup: text stays while it fades out, so the
+  // layout never jumps.
+  property string flash: ""
+  property bool flashVisible: false
+
+  // Backdating: a time picked on the graph, waiting for a drink.
+  property var pickTime: null
+  // The drink added most recently in this session, so undo removes that
+  // one even when it was logged back in time.
+  property var lastLogged: null
+
+  // Output tokens per hour from the coding agents, via tokens.py.
+  property var tokens: ({ hours: {}, sources: {} })
+  property double tokensFetchedAt: 0
+
+  // Drink editor draft.
+  property var editing: null            // { kind, custom, isNew }
+  property string draftName: ""
+  property int draftMg: 0
+  property string draftIcon: "mug"
 
   readonly property string stateDir: Quickshell.env("XDG_STATE_HOME")
     || (Quickshell.env("HOME") + "/.local/state")
+  readonly property string configDir: Quickshell.env("XDG_CONFIG_HOME")
+    || (Quickshell.env("HOME") + "/.config")
   readonly property string logPath: stateDir + "/omacaffeine/log.json"
-  readonly property string shellConfigPath: (Quickshell.env("XDG_CONFIG_HOME")
-    || (Quickshell.env("HOME") + "/.config")) + "/omarchy/shell.json"
+  readonly property string drinksPath: configDir + "/omacaffeine/drinks.json"
+  readonly property string shellConfigPath: configDir + "/omarchy/shell.json"
+  readonly property string pluginDir: String(Qt.resolvedUrl(".")).replace(/^file:\/\//, "").replace(/\/$/, "")
 
   // Times follow the Omarchy clock widget (24-hour unless it shows AM/PM),
   // and fall back to the system locale when no clock is configured.
@@ -54,6 +79,16 @@ Panel {
   readonly property int weightShown: imperial ? Model.kgToLb(bodyWeightKg) : bodyWeightKg
 
   // ---- derived -----------------------------------------------------------
+  readonly property var drinks: Model.allDrinks(drinksConfig)
+  readonly property int gridColumns: 5
+  // Presets, custom drinks, then "+ Create my own" tiles that fill the row.
+  readonly property var gridModel: {
+    var list = drinks.slice()
+    var pad = (gridColumns - list.length % gridColumns) % gridColumns
+    if (pad === 0) pad = 1
+    for (var i = 0; i < pad; i++) list.push({ placeholder: true, kind: "new-" + i })
+    return list
+  }
   readonly property var today: Model.todaysDrinks(log.drinks, now)
   readonly property int todayMg: Model.totalMg(today)
   readonly property int todayPercent: Math.round(todayMg / dailyLimitMg * 100)
@@ -65,7 +100,7 @@ Panel {
   readonly property var first: Model.firstDrink(today)
   readonly property var last: Model.lastDrink(log.drinks)
   readonly property string lastKind: last ? String(last.kind) : String(log.lastKind || "espresso")
-  readonly property var lastPreset: Model.preset(lastKind)
+  readonly property var lastPreset: Model.drink(lastKind, drinksConfig)
   readonly property int inBodyMg: Math.round(Model.inBody(log.drinks, now, halfLife))
   readonly property var cutoff: Model.cutoff(log.drinks, now, bedtime, halfLife,
     bedtimeLimitMg, lastPreset.mg)
@@ -87,11 +122,34 @@ Panel {
     ? "First caffeine today: " + Model.formatTime(Model.drinkTime(first), timeFmt)
       + " · " + first.name
     : "Let's brew you some coffee — you deserve it!"
+  readonly property string gridHeading: pickTime
+    ? Model.backdateHeading(seed) + " · " + Model.formatTime(pickTime, timeFmt) + " · Esc cancels"
+    : Model.heading(seed)
   readonly property color foreground: bar ? bar.foreground : Color.foreground
   readonly property color accent: Color.accent
   readonly property color urgent: bar ? bar.urgent : Color.urgent
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
   readonly property color dim: Qt.darker(foreground, 1.4)
+
+  // ---- week --------------------------------------------------------------
+  readonly property var week: Model.dayTotals(log.drinks, now, 7)
+  readonly property var weekTokens: week.map(function(d) { return Model.tokensForDay(tokens.hours, d.date) })
+  readonly property int weekAvgMg: Math.round(Model.mean(week.map(function(d) { return d.mg })))
+  readonly property real weekAvgDrinks: Model.mean(week.map(function(d) { return d.count }))
+  readonly property int weekMaxMg: Math.max(dailyLimitMg, Math.max.apply(null, week.map(function(d) { return d.mg })))
+  readonly property var weekPeak: week.reduce(function(best, d) { return !best || d.mg > best.mg ? d : best }, null)
+  readonly property int weekTokenTotal: weekTokens.reduce(function(a, b) { return a + b }, 0)
+  readonly property int weekTokenMax: Math.max(1, Math.max.apply(null, weekTokens))
+  readonly property int weekMgTotal: week.reduce(function(a, d) { return a + d.mg }, 0)
+  readonly property real mgSlope: Model.slope(week.map(function(d) { return d.mg }))
+  readonly property real tokenSlope: Model.slope(weekTokens)
+  readonly property var activeHours: Model.activeHours(log.drinks, tokens.hours, now, 7, halfLife)
+  readonly property var buckets: Model.tokenBuckets(activeHours)
+  readonly property var sweetSpot: Model.sweetSpot(buckets)
+  readonly property real bucketMax: Math.max(1, Math.max.apply(null, buckets.map(function(b) { return b.perHour })))
+  readonly property real hourR: Model.pearson(activeHours.map(function(p) { return p.mg }),
+    activeHours.map(function(p) { return p.tokens }))
+  readonly property int sourceFiles: (Number(tokens.sources.claude) || 0) + (Number(tokens.sources.codex) || 0)
 
   // ---- lifecycle ---------------------------------------------------------
   function open() {
@@ -113,6 +171,7 @@ Panel {
   function close() {
     setCenterHoverRevealSuppressed(false)
     page = "main"
+    pickTime = null
     root.controller.hide()
   }
 
@@ -122,11 +181,20 @@ Panel {
   }
 
   function goBack() {
+    if (pickTime) {
+      pickTime = null
+      return true
+    }
     if (page !== "main") {
       page = "main"
       return true
     }
     return false
+  }
+
+  function showPage(name) {
+    page = name
+    if (name === "week") fetchTokens(false)
   }
 
   function switchPanel(direction) {
@@ -146,26 +214,68 @@ Panel {
     now = new Date()
     seed = Math.floor(Math.random() * 1000)
     logFile.reload()
+    drinksFile.reload()
     shellConfigFile.reload()
+    fetchTokens(false)
+  }
+
+  function fetchTokens(force) {
+    if (!force && Date.now() - tokensFetchedAt < 120000) return
+    if (tokensProcess.running) return
+    tokensFetchedAt = Date.now()
+    tokensProcess.running = true
   }
 
   // ---- log ---------------------------------------------------------------
-  function logDrink(kind) {
-    var p = Model.preset(kind)
+  // Logs `kind` now, or at `at` when given, or at the time picked on the
+  // graph. Unknown kinds are refused rather than silently becoming espresso.
+  function logDrink(kind, at) {
+    var d = Model.drink(kind, drinksConfig)
+    if (d.kind !== String(kind)) {
+      showFlash("No drink called " + kind)
+      return false
+    }
+    var when = at || pickTime || new Date()
+    var backdated = Math.abs(when.getTime() - Date.now()) > 90000
     var next = Model.parseLog(Model.serializeLog(log))
-    next.drinks.push({ t: new Date().toISOString(), kind: p.kind, name: p.name, mg: p.mg })
-    next.lastKind = p.kind
+    var entry = { t: when.toISOString(), kind: d.kind, name: d.name, mg: d.mg }
+    if (d.custom) entry.icon = d.icon
+    next.drinks.push(entry)
+    next.lastKind = d.kind
     commitLog(next)
-    showFlash(p.name + " logged · +" + p.mg + " mg")
+    lastLogged = entry
+    pickTime = null
+    showFlash(d.name + (backdated ? " logged at " + Model.formatTime(when, timeFmt) : " logged")
+      + " · +" + d.mg + " mg")
+    return true
   }
 
   function logLast() { logDrink(lastKind) }
 
+  function logAt(kind, timeText) {
+    var parsed = Model.parseBedtime(timeText)
+    if (!parsed) {
+      showFlash("Time needs to look like " + bedtimeLabel)
+      return false
+    }
+    var reference = new Date()
+    var when = new Date(reference.getFullYear(), reference.getMonth(), reference.getDate(),
+      parsed.hours, parsed.minutes, 0, 0)
+    if (when.getTime() > reference.getTime()) when = new Date(when.getTime() - 24 * 3600000)
+    return logDrink(kind, when)
+  }
+
   function undoLast() {
-    var latest = Model.lastDrink(log.drinks)
-    if (!latest) return
-    removeDrink(latest)
-    showFlash("Removed " + latest.name)
+    var target = null
+    if (lastLogged) {
+      for (var i = 0; i < log.drinks.length; i++)
+        if (log.drinks[i].t === lastLogged.t && log.drinks[i].kind === lastLogged.kind) target = log.drinks[i]
+    }
+    if (!target) target = Model.lastDrink(log.drinks)
+    if (!target) return
+    removeDrink(target)
+    lastLogged = null
+    showFlash("Removed " + target.name)
   }
 
   function removeDrink(drink) {
@@ -187,7 +297,81 @@ Panel {
 
   function showFlash(text) {
     flash = text
+    flashVisible = true
     flashTimer.restart()
+  }
+
+  // ---- drinks: custom drinks and overrides --------------------------------
+  function commitDrinks(next) {
+    drinksConfig = next
+    drinksFile.setText(Model.serializeDrinksConfig(next))
+  }
+
+  function openEditor(kind) {
+    var d = Model.drink(kind, drinksConfig)
+    if (d.kind !== kind) return
+    editing = { kind: d.kind, custom: d.custom, isNew: false }
+    draftName = d.name
+    draftMg = d.mg
+    draftIcon = d.icon
+    page = "drink"
+  }
+
+  function openNewDrink() {
+    editing = { kind: "", custom: true, isNew: true }
+    draftName = ""
+    draftMg = 100
+    draftIcon = "mug"
+    page = "drink"
+  }
+
+  function saveEditor() {
+    if (!editing) return
+    var next = Model.cloneDrinksConfig(drinksConfig)
+    var mg = Math.max(0, Math.round(draftMg))
+    var name = draftName.trim() || "My drink"
+    if (editing.custom) {
+      if (editing.isNew) {
+        next.custom.push({ kind: Model.newCustomKind(), name: name, mg: mg, icon: draftIcon })
+      } else {
+        for (var i = 0; i < next.custom.length; i++) {
+          if (next.custom[i].kind !== editing.kind) continue
+          next.custom[i].name = name
+          next.custom[i].mg = mg
+          next.custom[i].icon = draftIcon
+        }
+      }
+      showFlash(name + " saved · " + mg + " mg")
+    } else {
+      if (mg === Model.preset(editing.kind).mg) delete next.overrides[editing.kind]
+      else next.overrides[editing.kind] = mg
+      showFlash(Model.preset(editing.kind).name + " is now " + mg + " mg")
+    }
+    commitDrinks(next)
+    editing = null
+    page = "main"
+  }
+
+  function resetEditorMg() {
+    if (!editing || editing.custom) return
+    draftMg = Model.preset(editing.kind).mg
+  }
+
+  function deleteEditing() {
+    if (!editing || !editing.custom || editing.isNew) return
+    var next = Model.cloneDrinksConfig(drinksConfig)
+    next.custom = next.custom.filter(function(c) { return c.kind !== editing.kind })
+    commitDrinks(next)
+    showFlash("Deleted " + draftName)
+    editing = null
+    page = "main"
+  }
+
+  function resetAllOverrides() {
+    var next = Model.cloneDrinksConfig(drinksConfig)
+    next.overrides = {}
+    commitDrinks(next)
+    showFlash("Every preset back to its default mg")
   }
 
   // ---- settings persistence ---------------------------------------------
@@ -226,13 +410,29 @@ Panel {
   onTimeFmtChanged: bedtimeDraft = bedtimeLabel
   Component.onCompleted: {
     bedtimeDraft = bedtimeLabel
-    ensureStateDir.running = true
+    ensureDirs.running = true
   }
 
   Process {
-    id: ensureStateDir
-    command: ["mkdir", "-p", root.stateDir + "/omacaffeine"]
-    onExited: logFile.reload()
+    id: ensureDirs
+    command: ["mkdir", "-p", root.stateDir + "/omacaffeine", root.configDir + "/omacaffeine"]
+    onExited: {
+      logFile.reload()
+      drinksFile.reload()
+    }
+  }
+
+  Process {
+    id: tokensProcess
+    command: ["python3", root.pluginDir + "/tokens.py", "8"]
+    stdout: StdioCollector {
+      onStreamFinished: {
+        try {
+          var parsed = JSON.parse(text)
+          if (parsed && parsed.hours) root.tokens = parsed
+        } catch (e) {}
+      }
+    }
   }
 
   FileView {
@@ -244,6 +444,17 @@ Panel {
     onFileChanged: reload()
     onLoaded: root.log = Model.pruneLog(Model.parseLog(text()), new Date())
     onLoadFailed: root.log = Model.emptyLog()
+  }
+
+  FileView {
+    id: drinksFile
+    path: root.drinksPath
+    watchChanges: true
+    printErrors: false
+    atomicWrites: true
+    onFileChanged: reload()
+    onLoaded: root.drinksConfig = Model.parseDrinksConfig(text())
+    onLoadFailed: root.drinksConfig = Model.emptyDrinksConfig()
   }
 
   FileView {
@@ -265,8 +476,8 @@ Panel {
 
   Timer {
     id: flashTimer
-    interval: 2400
-    onTriggered: root.flash = ""
+    interval: 2600
+    onTriggered: root.flashVisible = false
   }
 
   IpcHandler {
@@ -278,15 +489,21 @@ Panel {
     function hide(): void { root.close() }
     function toggle(): void { root.toggle() }
     function log(kind: string): string {
-      root.logDrink(kind)
-      return root.todayMg + " mg today"
+      return root.logDrink(kind) ? root.todayMg + " mg today" : "unknown drink: " + kind
+    }
+    function logAt(kind: string, time: string): string {
+      return root.logAt(kind, time) ? root.todayMg + " mg today" : "could not log " + kind + " at " + time
     }
     function logLast(): string {
       root.logLast()
       return root.todayMg + " mg today"
     }
     function undo(): void { root.undoLast() }
-    function settings(): void { root.openFromHotkey(); root.page = "settings" }
+    function settings(): void { root.openFromHotkey(); root.showPage("settings") }
+    function week(): void { root.openFromHotkey(); root.showPage("week") }
+    function drinks(): string {
+      return root.drinks.map(function(d) { return d.kind + " " + d.mg + " mg" }).join("\n")
+    }
     function status(): string {
       return root.todayMg + " mg of " + root.dailyLimitMg + " (" + root.todayPercent
         + "%) · " + root.today.length + (root.today.length === 1 ? " drink · " : " drinks · ")
@@ -309,8 +526,11 @@ Panel {
     PanelKeyCatcher {
       id: keyCatcher
       anchors.fill: parent
-      blocked: bedtimeField.activeFocus
-      onReturnRequested: if (root.page === "main") root.logLast()
+      blocked: bedtimeField.activeFocus || nameField.activeFocus
+      onReturnRequested: {
+        if (root.page === "main") root.logLast()
+        else if (root.page === "drink") root.saveEditor()
+      }
       onCloseRequested: if (!root.goBack()) root.close()
       onTabRequested: function(direction) { root.switchPanel(direction) }
 
@@ -326,7 +546,7 @@ Panel {
         Column {
           id: column
           width: scroll.width
-          spacing: Style.space(14)
+          spacing: Style.space(12)
 
           // ================= header =================
           Item {
@@ -335,6 +555,8 @@ Panel {
 
             Row {
               anchors.left: parent.left
+              anchors.right: headerButtons.left
+              anchors.rightMargin: Style.space(8)
               anchors.verticalCenter: parent.verticalCenter
               spacing: Style.space(8)
 
@@ -357,15 +579,20 @@ Panel {
               }
               Text {
                 anchors.verticalCenter: parent.verticalCenter
-                text: root.page === "main" ? "OmaCaffeine" : "Settings"
+                text: root.page === "main" ? "OmaCaffeine"
+                  : (root.page === "settings" ? "Settings"
+                  : (root.page === "week" ? Model.weekHeading(root.seed)
+                  : (root.editing && root.editing.isNew ? "New drink" : "Edit " + root.draftName)))
                 color: root.foreground
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.title
                 font.bold: true
+                elide: Text.ElideRight
               }
             }
 
             Row {
+              id: headerButtons
               anchors.right: parent.right
               anchors.verticalCenter: parent.verticalCenter
               spacing: Style.space(4)
@@ -382,11 +609,19 @@ Panel {
               }
               PanelActionButton {
                 visible: root.page === "main"
+                iconText: "󰄨"
+                tooltipText: "Last seven days"
+                foreground: root.foreground
+                fontFamily: root.fontFamily
+                onClicked: root.showPage("week")
+              }
+              PanelActionButton {
+                visible: root.page === "main"
                 iconText: "󰒓"
                 tooltipText: "Settings"
                 foreground: root.foreground
                 fontFamily: root.fontFamily
-                onClicked: root.page = "settings"
+                onClicked: root.showPage("settings")
               }
               PanelActionButton {
                 iconText: "✕"
@@ -418,6 +653,25 @@ Panel {
               sublabel: root.cupLevel > 1 ? "stack overflow"
                 : (root.cupShowsBody ? root.inBodyMg + " mg in you"
                   : root.todayMg + " / " + root.dailyLimitMg + " mg")
+            }
+
+            // The confirmation floats over the steam and fades, so nothing
+            // below it moves.
+            Text {
+              id: flashText
+              readonly property real maxWidth: cup.width * 1.6
+              x: Math.max(0, cup.x + cup.width / 2 - width / 2)
+              y: 0
+              width: Math.min(implicitWidth, maxWidth)
+              text: root.flash
+              color: root.accent
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+              font.bold: true
+              horizontalAlignment: Text.AlignHCenter
+              elide: Text.ElideRight
+              opacity: root.flashVisible ? 1 : 0
+              Behavior on opacity { NumberAnimation { duration: 450; easing.type: Easing.InOutSine } }
             }
 
             Column {
@@ -490,21 +744,11 @@ Panel {
             }
           }
 
-          Text {
-            visible: root.page === "main" && root.flash !== ""
-            width: parent.width
-            text: root.flash
-            color: root.accent
-            font.family: root.fontFamily
-            font.pixelSize: Style.font.caption
-            horizontalAlignment: Text.AlignHCenter
-          }
-
           PanelSectionHeader {
             visible: root.page === "main"
             width: parent.width
-            text: Model.heading(root.seed).toUpperCase()
-            foreground: root.foreground
+            text: root.gridHeading.toUpperCase()
+            foreground: root.pickTime ? root.accent : root.foreground
             fontFamily: root.fontFamily
           }
 
@@ -512,19 +756,20 @@ Panel {
             id: drinkGrid
             visible: root.page === "main"
             width: parent.width
-            columns: 5
+            columns: root.gridColumns
             columnSpacing: Style.space(6)
             rowSpacing: Style.space(6)
             readonly property real cellWidth: (width - columnSpacing * (columns - 1)) / columns
 
             Repeater {
-              model: Model.PRESETS
+              model: root.gridModel
 
               BorderSurface {
                 required property var modelData
-                readonly property bool isLast: modelData.kind === root.lastKind
+                readonly property bool placeholder: modelData.placeholder === true
+                readonly property bool isLast: !placeholder && modelData.kind === root.lastKind
                 width: drinkGrid.cellWidth
-                height: Style.space(66)
+                height: Style.space(62)
                 radius: Style.cornerRadius
                 color: isLast
                   ? Style.selectedFillFor(root.foreground, root.accent)
@@ -534,30 +779,45 @@ Panel {
                 borderSpec: Border.controlSpec(isLast ? "selected"
                   : (drinkArea.containsMouse ? "hover-cursor" : "normal"),
                   root.foreground, root.accent)
+                opacity: placeholder && !drinkArea.containsMouse ? 0.6 : 1
 
                 Column {
                   anchors.centerIn: parent
                   spacing: Style.space(2)
 
                   DrinkIcon {
+                    visible: !placeholder
                     anchors.horizontalCenter: parent.horizontalCenter
-                    kind: modelData.kind
+                    kind: placeholder ? "mug" : modelData.icon
                     size: Style.space(22)
                     strokeWidth: 1.7
                     color: isLast ? root.accent : root.foreground
                   }
                   Text {
+                    visible: placeholder
                     anchors.horizontalCenter: parent.horizontalCenter
-                    text: modelData.name
-                    color: root.foreground
+                    text: "󰐕"
+                    color: root.dim
                     font.family: root.fontFamily
-                    font.pixelSize: Style.font.caption
-                    font.bold: isLast
+                    font.pixelSize: Style.font.iconLarge
+                    height: Style.space(22)
+                    verticalAlignment: Text.AlignVCenter
                   }
                   Text {
                     anchors.horizontalCenter: parent.horizontalCenter
-                    text: modelData.mg + " mg"
-                    color: root.dim
+                    width: Math.min(implicitWidth, drinkGrid.cellWidth - Style.space(8))
+                    text: placeholder ? "Create my own" : modelData.name
+                    color: placeholder ? root.dim : root.foreground
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.caption
+                    font.bold: isLast
+                    elide: Text.ElideRight
+                  }
+                  Text {
+                    visible: !placeholder
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: modelData.mg + " mg" + (modelData.overridden ? " ·" : "")
+                    color: modelData.overridden ? root.accent : root.dim
                     font.family: root.fontFamily
                     font.pixelSize: Style.font.caption
                   }
@@ -567,13 +827,22 @@ Panel {
                   id: drinkArea
                   anchors.fill: parent
                   hoverEnabled: true
+                  acceptedButtons: Qt.LeftButton | Qt.RightButton
                   cursorShape: Qt.PointingHandCursor
-                  onClicked: root.logDrink(modelData.kind)
+                  onClicked: function(mouse) {
+                    if (placeholder) root.openNewDrink()
+                    else if (mouse.button === Qt.RightButton) root.openEditor(modelData.kind)
+                    else root.logDrink(modelData.kind)
+                  }
                 }
 
                 PanelToolTip {
                   visible: drinkArea.containsMouse
-                  text: modelData.serving + " · " + modelData.mg + " mg caffeine"
+                  text: placeholder
+                    ? "Name it, set the mg, pick an icon"
+                    : modelData.serving + " · " + modelData.mg + " mg caffeine"
+                      + (modelData.overridden ? " (default " + modelData.defaultMg + ")" : "")
+                      + " · right-click to edit"
                 }
               }
             }
@@ -582,7 +851,9 @@ Panel {
           PanelSectionHeader {
             visible: root.page === "main"
             width: parent.width
-            text: "TIMELINE · INTAKE, HALF-LIFE AND BEDTIME"
+            text: root.pickTime
+              ? "TIMELINE · NOW PICK A DRINK ABOVE, OR CLICK AGAIN TO MOVE THE TIME"
+              : "TIMELINE · INTAKE, HALF-LIFE AND BEDTIME · CLICK TO LOG BACK IN TIME"
             foreground: root.foreground
             fontFamily: root.fontFamily
           }
@@ -590,7 +861,7 @@ Panel {
           CaffeineGraph {
             visible: root.page === "main"
             width: parent.width
-            height: Style.space(120)
+            height: Style.space(112)
             drinks: root.log.drinks
             now: root.now
             bedtime: root.cutoff.bedtime
@@ -601,76 +872,487 @@ Panel {
             urgent: root.urgent
             fontFamily: root.fontFamily
             timeFormat: root.timeFmt
+            pickTime: root.pickTime
+            onPicked: function(time) {
+              // A click in the future, or on the time already picked, cancels.
+              if (!time || (root.pickTime && root.pickTime.getTime() === time.getTime())) {
+                root.pickTime = null
+                return
+              }
+              root.pickTime = time
+            }
           }
 
           PanelSectionHeader {
             visible: root.page === "main" && root.today.length > 0
             width: parent.width
-            text: "TODAY'S LOG"
+            text: "TODAY'S LOG" + (root.today.length > 3
+              ? " · " + root.today.length + " DRINKS · SCROLL FOR THE REST" : "")
             foreground: root.foreground
             fontFamily: root.fontFamily
           }
 
-          Column {
+          // Three rows on screen; the rest scroll inside, so the panel does
+          // not grow with every cup.
+          Flickable {
+            id: logScroll
+            readonly property int rowHeight: Style.space(24)
+            readonly property int rowGap: Style.space(2)
             visible: root.page === "main" && root.today.length > 0
             width: parent.width
-            spacing: Style.space(2)
+            height: Math.min(logColumn.implicitHeight, rowHeight * 3 + rowGap * 2)
+            contentWidth: width
+            contentHeight: logColumn.implicitHeight
+            clip: true
+            boundsBehavior: Flickable.StopAtBounds
+            interactive: contentHeight > height
 
-            Repeater {
-              model: root.today.slice().reverse()
+            Column {
+              id: logColumn
+              width: logScroll.width
+              spacing: logScroll.rowGap
 
-              Item {
-                required property var modelData
-                width: parent.width
-                height: Style.space(26)
+              Repeater {
+                model: root.today.slice().reverse()
 
-                Row {
-                  anchors.left: parent.left
-                  anchors.verticalCenter: parent.verticalCenter
-                  spacing: Style.space(10)
+                Item {
+                  required property var modelData
+                  width: parent.width
+                  height: logScroll.rowHeight
 
-                  Text {
-                    width: Style.space(64)
-                    text: Model.formatTime(Model.drinkTime(modelData), root.timeFmt)
-                    color: root.dim
-                    font.family: root.fontFamily
-                    font.pixelSize: Style.font.bodySmall
+                  Row {
+                    anchors.left: parent.left
                     anchors.verticalCenter: parent.verticalCenter
-                  }
-                  DrinkIcon {
-                    kind: modelData.kind
-                    size: Style.space(18)
-                    color: root.foreground
-                    strokeWidth: 1.8
-                    anchors.verticalCenter: parent.verticalCenter
-                  }
-                  Text {
-                    text: modelData.name
-                    color: root.foreground
-                    font.family: root.fontFamily
-                    font.pixelSize: Style.font.bodySmall
-                    anchors.verticalCenter: parent.verticalCenter
-                  }
-                  Text {
-                    text: modelData.mg + " mg"
-                    color: root.dim
-                    font.family: root.fontFamily
-                    font.pixelSize: Style.font.bodySmall
-                    anchors.verticalCenter: parent.verticalCenter
-                  }
-                }
+                    spacing: Style.space(10)
 
-                PanelActionButton {
-                  anchors.right: parent.right
-                  anchors.verticalCenter: parent.verticalCenter
-                  iconText: "✕"
-                  fontSize: Style.font.caption
-                  tooltipText: "Remove"
-                  foreground: root.dim
-                  fontFamily: root.fontFamily
-                  onClicked: root.removeDrink(modelData)
+                    Text {
+                      width: Style.space(64)
+                      text: Model.formatTime(Model.drinkTime(modelData), root.timeFmt)
+                      color: root.dim
+                      font.family: root.fontFamily
+                      font.pixelSize: Style.font.bodySmall
+                      anchors.verticalCenter: parent.verticalCenter
+                    }
+                    DrinkIcon {
+                      kind: Model.iconFor(modelData, root.drinksConfig)
+                      size: Style.space(18)
+                      color: root.foreground
+                      strokeWidth: 1.8
+                      anchors.verticalCenter: parent.verticalCenter
+                    }
+                    Text {
+                      text: modelData.name
+                      color: root.foreground
+                      font.family: root.fontFamily
+                      font.pixelSize: Style.font.bodySmall
+                      anchors.verticalCenter: parent.verticalCenter
+                    }
+                    Text {
+                      text: modelData.mg + " mg"
+                      color: root.dim
+                      font.family: root.fontFamily
+                      font.pixelSize: Style.font.bodySmall
+                      anchors.verticalCenter: parent.verticalCenter
+                    }
+                  }
+
+                  PanelActionButton {
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    iconText: "✕"
+                    fontSize: Style.font.caption
+                    tooltipText: "Remove"
+                    foreground: root.dim
+                    fontFamily: root.fontFamily
+                    onClicked: root.removeDrink(modelData)
+                  }
                 }
               }
+            }
+          }
+
+          // ================= drink editor =================
+          Column {
+            visible: root.page === "drink"
+            width: parent.width
+            spacing: Style.space(14)
+
+            Row {
+              width: parent.width
+              spacing: Style.space(16)
+
+              // Live preview: the tile exactly as the grid will show it.
+              BorderSurface {
+                width: Style.space(104)
+                height: Style.space(62)
+                anchors.verticalCenter: parent.verticalCenter
+                radius: Style.cornerRadius
+                color: Style.selectedFillFor(root.foreground, root.accent)
+                borderSpec: Border.controlSpec("selected", root.foreground, root.accent)
+
+                Column {
+                  anchors.centerIn: parent
+                  spacing: Style.space(2)
+                  DrinkIcon {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    kind: root.draftIcon
+                    size: Style.space(22)
+                    strokeWidth: 1.7
+                    color: root.accent
+                  }
+                  Text {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    width: Math.min(implicitWidth, Style.space(96))
+                    text: root.draftName.trim() || "My drink"
+                    color: root.foreground
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.caption
+                    font.bold: true
+                    elide: Text.ElideRight
+                  }
+                  Text {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: root.draftMg + " mg"
+                    color: root.dim
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.caption
+                  }
+                }
+              }
+
+              Column {
+                spacing: Style.space(4)
+                visible: root.editing !== null && root.editing.custom
+                Text {
+                  text: "Name"
+                  color: root.foreground
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.body
+                }
+                TextField {
+                  id: nameField
+                  width: Style.space(180)
+                  text: root.draftName
+                  placeholderText: "Batch brew"
+                  foreground: root.foreground
+                  accent: root.accent
+                  font.family: root.fontFamily
+                  onTextEdited: root.draftName = text
+                  onAccepted: root.saveEditor()
+                }
+              }
+
+              NumberField {
+                label: "Caffeine (mg)"
+                value: root.draftMg
+                from: 0
+                to: 1000
+                stepSize: 1
+                foreground: root.foreground
+                accent: root.accent
+                fontFamily: root.fontFamily
+                onModified: function(v) { root.draftMg = v }
+              }
+            }
+
+            Text {
+              width: parent.width
+              visible: root.editing !== null && !root.editing.custom
+              text: root.editing && !root.editing.custom
+                ? Model.preset(root.editing.kind).serving + " · default " + Model.preset(root.editing.kind).mg
+                  + " mg. Your espresso is a double? Make it 126 mg here; the log keeps the mg each cup had when it was logged."
+                : ""
+              color: root.dim
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+              wrapMode: Text.WordWrap
+            }
+
+            PanelSectionHeader {
+              visible: root.editing !== null && root.editing.custom
+              width: parent.width
+              text: "ICON"
+              foreground: root.foreground
+              fontFamily: root.fontFamily
+            }
+
+            Grid {
+              id: iconGrid
+              visible: root.editing !== null && root.editing.custom
+              width: parent.width
+              columns: 8
+              columnSpacing: Style.space(6)
+              rowSpacing: Style.space(6)
+              readonly property real cellWidth: (width - columnSpacing * (columns - 1)) / columns
+
+              Repeater {
+                model: Model.ICON_KINDS
+
+                BorderSurface {
+                  required property var modelData
+                  readonly property bool picked: modelData === root.draftIcon
+                  width: iconGrid.cellWidth
+                  height: Style.space(40)
+                  radius: Style.cornerRadius
+                  color: picked
+                    ? Style.selectedFillFor(root.foreground, root.accent)
+                    : (iconArea.containsMouse
+                      ? Style.hoverFillFor(root.foreground, root.accent)
+                      : Style.normalFillFor(root.foreground, root.accent))
+                  borderSpec: Border.controlSpec(picked ? "selected"
+                    : (iconArea.containsMouse ? "hover-cursor" : "normal"),
+                    root.foreground, root.accent)
+
+                  DrinkIcon {
+                    anchors.centerIn: parent
+                    kind: modelData
+                    size: Style.space(22)
+                    strokeWidth: 1.7
+                    color: picked ? root.accent : root.foreground
+                  }
+                  MouseArea {
+                    id: iconArea
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: root.draftIcon = modelData
+                  }
+                }
+              }
+            }
+
+            Row {
+              spacing: Style.space(8)
+
+              Button {
+                bordered: true
+                text: root.editing && root.editing.isNew ? "Create drink" : "Save"
+                foreground: root.foreground
+                accent: root.accent
+                fontFamily: root.fontFamily
+                fontSize: Style.font.bodySmall
+                onClicked: root.saveEditor()
+              }
+              Button {
+                visible: root.editing !== null && !root.editing.custom
+                bordered: true
+                text: "Reset to default (" + (root.editing && !root.editing.custom ? Model.preset(root.editing.kind).mg : 0) + " mg)"
+                foreground: root.foreground
+                accent: root.accent
+                fontFamily: root.fontFamily
+                fontSize: Style.font.bodySmall
+                enabled: root.editing !== null && !root.editing.custom && root.draftMg !== Model.preset(root.editing.kind).mg
+                opacity: enabled ? 1 : 0.5
+                onClicked: root.resetEditorMg()
+              }
+              Button {
+                visible: root.editing !== null && root.editing.custom && !root.editing.isNew
+                bordered: true
+                text: "Delete"
+                foreground: root.urgent
+                accent: root.urgent
+                fontFamily: root.fontFamily
+                fontSize: Style.font.bodySmall
+                onClicked: root.deleteEditing()
+              }
+            }
+          }
+
+          // ================= week page =================
+          Column {
+            visible: root.page === "week"
+            width: parent.width
+            spacing: Style.space(14)
+
+            PanelSectionHeader {
+              width: parent.width
+              text: "LAST SEVEN DAYS · AVERAGE " + root.weekAvgMg + " MG/DAY"
+              foreground: root.foreground
+              fontFamily: root.fontFamily
+            }
+
+            // One column per day: a small cup, the mg, the weekday, then the
+            // agents' output tokens as a bar on the same column.
+            Row {
+              id: weekRow
+              width: parent.width
+              spacing: Style.space(8)
+              readonly property real cellWidth: (width - spacing * 6) / 7
+
+              Repeater {
+                model: root.week
+
+                Column {
+                  required property var modelData
+                  required property int index
+                  readonly property int dayTokens: root.weekTokens[index] || 0
+                  width: weekRow.cellWidth
+                  spacing: Style.space(3)
+
+                  CaffeineCup {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    width: Math.min(parent.width, Style.space(64))
+                    height: width
+                    level: modelData.mg / root.dailyLimitMg
+                    animated: false
+                    foreground: root.foreground
+                    urgent: root.urgent
+                    fontFamily: root.fontFamily
+                    opacity: modelData.isToday || modelData.mg > 0 ? 1 : 0.45
+                  }
+                  Text {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: modelData.mg + " mg"
+                    color: modelData.mg > root.dailyLimitMg ? root.urgent : root.foreground
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.bodySmall
+                    font.bold: modelData.isToday
+                  }
+                  Text {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: (modelData.isToday ? "Today" : modelData.label) + " · "
+                      + modelData.count + (modelData.count === 1 ? " cup" : " cups")
+                    color: root.dim
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.caption
+                  }
+                  Item {
+                    width: parent.width
+                    height: Style.space(36)
+                    Rectangle {
+                      anchors.bottom: parent.bottom
+                      anchors.horizontalCenter: parent.horizontalCenter
+                      width: parent.width * 0.6
+                      height: Math.max(dayTokens > 0 ? 2 : 0, parent.height * dayTokens / root.weekTokenMax)
+                      radius: 1
+                      color: root.accent
+                      opacity: modelData.isToday ? 0.95 : 0.7
+                    }
+                    Rectangle {
+                      anchors.bottom: parent.bottom
+                      width: parent.width
+                      height: 1
+                      color: root.dim
+                      opacity: 0.4
+                    }
+                  }
+                  Text {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: dayTokens > 0 ? Model.formatTokens(dayTokens) : "–"
+                    color: root.dim
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.caption
+                  }
+                }
+              }
+            }
+
+            Column {
+              width: parent.width
+              spacing: Style.space(5)
+
+              StatRow {
+                label: "Caffeine"
+                value: root.weekMgTotal + " mg this week · " + root.weekAvgDrinks.toFixed(1) + " cups/day"
+                  + (root.weekPeak && root.weekPeak.mg > 0
+                    ? " · peak " + (root.weekPeak.isToday ? "today" : root.weekPeak.label) + " " + root.weekPeak.mg + " mg" : "")
+              }
+              StatRow {
+                label: "Tokens"
+                value: root.weekTokenTotal > 0
+                  ? Model.formatTokens(root.weekTokenTotal) + " output tokens · "
+                    + Model.formatTokens(root.weekTokenTotal / 7) + "/day"
+                    + (root.weekMgTotal > 0 ? " · " + Model.formatTokens(root.weekTokenTotal / root.weekMgTotal) + " per mg" : "")
+                  : "No agent transcripts found this week"
+              }
+              StatRow {
+                label: "Trend"
+                value: "caffeine " + Model.describeTrend(root.mgSlope, "mg")
+                  + " · tokens " + Model.describeTrend(root.tokenSlope, "tok", Model.formatTokens)
+              }
+            }
+
+            PanelSectionHeader {
+              width: parent.width
+              text: "CAFFEINE × TOKENS · OUTPUT PER ACTIVE HOUR, BY MG IN YOUR SYSTEM"
+              foreground: root.foreground
+              fontFamily: root.fontFamily
+            }
+
+            Column {
+              width: parent.width
+              spacing: Style.space(4)
+
+              Repeater {
+                model: root.buckets
+
+                Item {
+                  required property var modelData
+                  readonly property bool best: root.sweetSpot !== null && root.sweetSpot.label === modelData.label
+                  width: parent.width
+                  height: Style.space(16)
+
+                  Text {
+                    id: bucketLabel
+                    width: Style.space(84)
+                    anchors.left: parent.left
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: modelData.label
+                    color: best ? root.accent : root.dim
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.caption
+                    font.bold: best
+                  }
+                  Rectangle {
+                    id: bucketBar
+                    anchors.left: bucketLabel.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: Math.max(modelData.hours > 0 ? 2 : 0,
+                      (parent.width - bucketLabel.width - Style.space(120)) * modelData.perHour / root.bucketMax)
+                    height: Style.space(8)
+                    radius: 1
+                    color: root.accent
+                    opacity: best ? 1 : 0.55
+                    Behavior on width { NumberAnimation { duration: 500; easing.type: Easing.InOutSine } }
+                  }
+                  Text {
+                    anchors.left: bucketBar.right
+                    anchors.leftMargin: Style.space(8)
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: modelData.hours > 0
+                      ? Model.formatTokens(modelData.perHour) + " tok/h · " + modelData.hours + (modelData.hours === 1 ? " hour" : " hours")
+                      : "no hours at this level"
+                    color: best ? root.foreground : root.dim
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.caption
+                    elide: Text.ElideRight
+                  }
+                }
+              }
+            }
+
+            ScrollingText {
+              width: parent.width
+              text: root.sweetSpot
+                ? "Sweet spot: " + root.sweetSpot.label + " in your system · "
+                  + Model.formatTokens(root.sweetSpot.perHour) + " tokens/hour · " + Model.describeCorrelation(root.hourR, root.activeHours.length)
+                : Model.describeCorrelation(root.hourR, root.activeHours.length)
+              color: root.accent
+              fontFamily: root.fontFamily
+              pixelSize: Style.font.bodySmall
+              bold: true
+            }
+
+            Text {
+              width: parent.width
+              text: "Correlation, not causation. Tokens are output tokens (thinking included) from Claude Code and Codex transcripts on this machine"
+                + (root.sourceFiles > 0 ? " (" + root.sourceFiles + " sessions this week)" : "")
+                + "; an hour counts as active when any agent produced tokens. Caffeine is the half-life model over your log. Both mostly measure \"at the keyboard\", so drink for the taste."
+              color: root.dim
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+              wrapMode: Text.WordWrap
             }
           }
 
@@ -812,6 +1494,36 @@ Panel {
               enabled: root.dailyLimitMg !== root.recommendedDaily
               opacity: enabled ? 1 : 0.5
               onClicked: root.saveSetting("dailyLimitMg", root.recommendedDaily)
+            }
+
+            PanelSectionHeader {
+              width: parent.width
+              text: "DRINKS"
+              foreground: root.foreground
+              fontFamily: root.fontFamily
+            }
+
+            Text {
+              width: parent.width
+              text: Model.PRESETS.length + " presets · " + Model.overrideCount(root.drinksConfig)
+                + " with your own mg · " + root.drinksConfig.custom.length + " of your own drinks. "
+                + "Right-click any drink on the main page to change its mg, or use the + tile to create one (name, mg, icon)."
+              color: root.dim
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+              wrapMode: Text.WordWrap
+            }
+
+            Button {
+              bordered: true
+              text: "Reset every preset to its default mg"
+              foreground: root.foreground
+              accent: root.accent
+              fontFamily: root.fontFamily
+              fontSize: Style.font.bodySmall
+              enabled: Model.overrideCount(root.drinksConfig) > 0
+              opacity: enabled ? 1 : 0.5
+              onClicked: root.resetAllOverrides()
             }
 
             PanelSectionHeader {
