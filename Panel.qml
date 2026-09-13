@@ -258,7 +258,8 @@ Panel {
     function settings(): void { root.openFromHotkey(); root.settingsOpen = true }
     function status(): string {
       return root.todayMg + " mg of " + root.dailyLimitMg + " (" + root.todayPercent
-        + "%) · " + root.today.length + " drinks · " + root.statusLine
+        + "%) · " + root.today.length + (root.today.length === 1 ? " drink · " : " drinks · ")
+        + root.statusLine
     }
   }
 
