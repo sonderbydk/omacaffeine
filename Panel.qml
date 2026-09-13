@@ -806,7 +806,9 @@ Panel {
             // below it moves.
             Text {
               id: flashText
-              readonly property real maxWidth: cup.width * 1.6
+              // Errors can be long; let the text run across the row rather
+              // than elide what the user needs to read.
+              readonly property real maxWidth: parent.width
               x: Math.max(0, cup.x + cup.width / 2 - width / 2)
               y: 0
               width: Math.min(implicitWidth, maxWidth)

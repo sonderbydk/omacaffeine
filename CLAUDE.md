@@ -18,6 +18,7 @@ the full history of decisions; this file holds what you need to keep going.
 | `CaffeineGraph.qml` | Pixel timeline; new/removed cells fade. |
 | `DrinkIcon.qml` | Outline icons as SVG path strings in a 24×24 box, `QtQuick.Shapes`. |
 | `ScrollingText.qml` | Single-line text that glides instead of wrapping. |
+| `dev/model-test.js` | Node smoke test for `Model.js`: `TZ=Europe/Copenhagen node dev/model-test.js <(sed 1d Model.js)`. Add a case when you touch the model. |
 | `dev/harness.sh` | Standalone Quickshell window to eyeball components without the bar. Parks its window top-left; `HARNESS_DELAY=2.4 dev/harness.sh shot.png` times the shot (the mid cup pours at 2 s, empties at 4 s). |
 
 Runtime files (not in the repo): log `~/.local/state/omacaffeine/log.json`
@@ -129,8 +130,23 @@ then a bar of the day's agent output tokens). Below: totals, trend (least
 squares slope per day), then "caffeine × tokens": active hours (any tokens)
 bucketed by caffeine in the body at mid-hour, mean tokens/hour per bucket,
 sweet spot = best bucket with ≥ 2 hours, Pearson r over active hours. Copy
-says "correlation, not causation" on purpose; keep it honest. Tokens are
-refreshed at most every two minutes when the panel opens or the page shows.
+says "correlation, not causation" on purpose; keep it honest. `tokens.py`
+runs only when the week page shows (a good result is kept two minutes);
+`tokensState` drives the loading/failed copy.
+
+## Invariants from the 2026-09-13 review
+
+- Never write `log.json` / `drinks.json` unless the file was read and
+  parsed (`logLoaded` / `drinksLoaded`); strict parsers return null on
+  anything we did not write. Commits return false and flash; callers keep
+  their draft and never report success first.
+- Calendar arithmetic through `Model.addDays` / the Date constructor, never
+  `+ 24 h`, so DST does not move midnight or bedtime.
+- Aggregates key on `dayKey` / `hourKeyNow` strings, not `now`, so the 30 s
+  clock does not rebuild Repeaters while the panel is closed; cup, glides
+  and the graph's samples are gated by `root.opened` / cached.
+- IPC and hotkeys log "now"; only the drink grid passes the graph pick.
+- User strings are `Text.PlainText`, bounded, ≤ 40 chars; mg 0..1000.
 
 ## Backlog (from the owner)
 
