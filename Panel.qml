@@ -1328,7 +1328,7 @@ Panel {
                     anchors.left: bucketLabel.right
                     anchors.verticalCenter: parent.verticalCenter
                     width: Math.max(modelData.hours > 0 ? 2 : 0,
-                      (parent.width - bucketLabel.width - Style.space(120)) * modelData.perHour / root.bucketMax)
+                      (parent.width - bucketLabel.width - Style.space(150)) * modelData.perHour / root.bucketMax)
                     height: Style.space(8)
                     radius: 1
                     color: root.accent
