@@ -53,6 +53,9 @@ Item {
     id: glide
     running: root.overflowing && root.visible && root.active
     loops: Animation.Infinite
+    // Stopping mid-glide (panel closed) must not park the text half-way;
+    // the next open starts from the left again.
+    onRunningChanged: if (!running) label.x = 0
     PauseAnimation { duration: root.pauseMs }
     NumberAnimation {
       target: label
