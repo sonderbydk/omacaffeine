@@ -406,10 +406,18 @@ Panel {
     bedtimeDraft = Model.formatTime(Model.bedtimeAsDate(normalized, now), timeFmt)
   }
 
-  onSettingsChanged: bedtimeDraft = bedtimeLabel
-  onTimeFmtChanged: bedtimeDraft = bedtimeLabel
+  // Computed from the raw inputs rather than `bedtimeLabel`: when a change
+  // handler runs, dependent bindings may not have been re-evaluated yet.
+  function syncBedtimeDraft() {
+    var stored = Model.normalizedBedtime(setting("bedtime", "23:00"))
+    bedtimeDraft = Model.formatTime(Model.bedtimeAsDate(stored, new Date()),
+      Model.timeFormatFromClock(clockFormat))
+  }
+
+  onSettingsChanged: syncBedtimeDraft()
+  onClockFormatChanged: syncBedtimeDraft()
   Component.onCompleted: {
-    bedtimeDraft = bedtimeLabel
+    syncBedtimeDraft()
     ensureDirs.running = true
   }
 
@@ -501,6 +509,11 @@ Panel {
     function undo(): void { root.undoLast() }
     function settings(): void { root.openFromHotkey(); root.showPage("settings") }
     function week(): void { root.openFromHotkey(); root.showPage("week") }
+    function edit(kind: string): void {
+      root.openFromHotkey()
+      if (!kind || kind === "new") root.openNewDrink()
+      else root.openEditor(kind)
+    }
     function drinks(): string {
       return root.drinks.map(function(d) { return d.kind + " " + d.mg + " mg" }).join("\n")
     }
@@ -1210,8 +1223,15 @@ Panel {
                   }
                   Text {
                     anchors.horizontalCenter: parent.horizontalCenter
-                    text: (modelData.isToday ? "Today" : modelData.label) + " · "
-                      + modelData.count + (modelData.count === 1 ? " cup" : " cups")
+                    text: modelData.isToday ? "Today" : modelData.label
+                    color: modelData.isToday ? root.foreground : root.dim
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.caption
+                    font.bold: modelData.isToday
+                  }
+                  Text {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: modelData.count + (modelData.count === 1 ? " cup" : " cups")
                     color: root.dim
                     font.family: root.fontFamily
                     font.pixelSize: Style.font.caption
@@ -1332,16 +1352,28 @@ Panel {
               }
             }
 
-            ScrollingText {
+            Column {
               width: parent.width
-              text: root.sweetSpot
-                ? "Sweet spot: " + root.sweetSpot.label + " in your system · "
-                  + Model.formatTokens(root.sweetSpot.perHour) + " tokens/hour · " + Model.describeCorrelation(root.hourR, root.activeHours.length)
-                : Model.describeCorrelation(root.hourR, root.activeHours.length)
-              color: root.accent
-              fontFamily: root.fontFamily
-              pixelSize: Style.font.bodySmall
-              bold: true
+              spacing: Style.space(3)
+
+              ScrollingText {
+                width: parent.width
+                text: root.sweetSpot
+                  ? "Sweet spot: " + root.sweetSpot.label + " in your system · "
+                    + Model.formatTokens(root.sweetSpot.perHour) + " tokens/hour"
+                  : "No sweet spot yet · two active hours at one level is all it takes"
+                color: root.accent
+                fontFamily: root.fontFamily
+                pixelSize: Style.font.bodySmall
+                bold: true
+              }
+              ScrollingText {
+                width: parent.width
+                text: Model.describeCorrelation(root.hourR, root.activeHours.length)
+                color: root.dim
+                fontFamily: root.fontFamily
+                pixelSize: Style.font.caption
+              }
             }
 
             Text {
