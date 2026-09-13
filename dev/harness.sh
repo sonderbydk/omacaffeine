@@ -29,12 +29,15 @@ out=$1
 quickshell -p "$work" >/dev/null 2>&1 &
 qs=$!
 sleep 2.5
-geo=$(hyprctl clients -j | python3 -c '
+hyprctl clients -j > "$work/clients.json"
+geo=$(python3 - "$work/clients.json" <<'PY'
 import json, sys
-for c in json.load(sys.stdin):
+for c in json.load(open(sys.argv[1])):
     if c["title"] == "OmaCaffeine harness":
-        print(f"{c[\"at\"][0]},{c[\"at\"][1]} {c[\"size\"][0]}x{c[\"size\"][1]}")
-        break')
+        print("%d,%d %dx%d" % (c["at"][0], c["at"][1], c["size"][0], c["size"][1]))
+        break
+PY
+)
 if [[ -n $geo ]]; then
   grim -g "$geo" "$out" && echo "wrote $out"
 else
