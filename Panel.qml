@@ -661,7 +661,7 @@ Panel {
               foreground: root.foreground
               urgent: root.urgent
               fontFamily: root.fontFamily
-              label: root.cupPercent + "%"
+              label: Math.round(cup.shownValue * 100) + "%"
               sublabel: root.cupLevel > 1 ? "stack overflow"
                 : (root.cupShowsBody ? root.inBodyMg + " mg in you"
                   : root.todayMg + " / " + root.dailyLimitMg + " mg")

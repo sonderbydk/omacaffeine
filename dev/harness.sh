@@ -28,7 +28,10 @@ fi
 out=$1
 quickshell -p "$work" >/dev/null 2>&1 &
 qs=$!
-sleep 2.5
+sleep 1
+# Park the window top-left so an open bar panel (right side) cannot cover it.
+hyprctl dispatch movewindowpixel "exact 40 80,title:^(OmaCaffeine harness)$" >/dev/null 2>&1 || true
+sleep "${HARNESS_DELAY:-1.5}"
 hyprctl clients -j > "$work/clients.json"
 geo=$(python3 - "$work/clients.json" <<'PY'
 import json, sys

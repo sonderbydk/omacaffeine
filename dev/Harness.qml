@@ -20,7 +20,7 @@ ShellRoot {
       kind: "latte", name: "Latte", mg: 126 }]
 
     Timer {
-      interval: 1500; running: true
+      interval: 2000; running: true
       onTriggered: {
         win.drinks = win.drinks.concat([{ t: new Date().toISOString(), kind: "monster", name: "Monster", mg: 160 }])
         win.lvl = 0.9
@@ -39,7 +39,7 @@ ShellRoot {
       Row {
         spacing: 18
         CaffeineCup { width: 130; height: 130; level: 0; label: "0%"; sublabel: ""; foreground: Color.foreground; urgent: Color.urgent }
-        CaffeineCup { width: 130; height: 130; level: win.lvl; label: Math.round(win.lvl * 100) + "%"; sublabel: Math.round(win.lvl * 400) + " / 400 mg"; foreground: Color.foreground; urgent: Color.urgent }
+        CaffeineCup { id: midCup; width: 130; height: 130; level: win.lvl; label: Math.round(midCup.shownValue * 100) + "%"; sublabel: Math.round(midCup.shownValue * 400) + " / 400 mg"; foreground: Color.foreground; urgent: Color.urgent }
         CaffeineCup { width: 130; height: 130; level: 1.15; label: "115%"; sublabel: "stack overflow"; foreground: Color.foreground; urgent: Color.urgent }
 
         Column {
