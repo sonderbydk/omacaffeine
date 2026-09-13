@@ -47,7 +47,23 @@ Item {
     return { from: from, to: to }
   }
 
+  // The log is replaced twice per change (memory, then the file watcher), so
+  // only a real difference in drinks starts the fade.
+  property string drinkKey: ""
+  function keyFor(list) {
+    var parts = []
+    for (var i = 0; i < (list || []).length; i++) parts.push(list[i].t + "|" + list[i].mg)
+    return parts.join(",")
+  }
   onDrinksChanged: {
+    var key = keyFor(drinks)
+    if (key === drinkKey) return
+    var firstLoad = drinkKey === ""
+    drinkKey = key
+    if (firstLoad || !lastLevels) {
+      canvas.requestPaint()
+      return
+    }
     previousLevels = lastLevels
     reveal = 0
     revealAnimation.restart()
@@ -60,8 +76,8 @@ Item {
     property: "reveal"
     from: 0
     to: 1
-    duration: 700
-    easing.type: Easing.OutCubic
+    duration: 900
+    easing.type: Easing.InOutSine
   }
   onNowChanged: canvas.requestPaint()
   onBedtimeChanged: canvas.requestPaint()
@@ -120,22 +136,20 @@ Item {
         for (var r = 0; r < rows; r++) {
           var y = plotH - (r + 1) * pitch + root.gap
           var on = r < lit
-          if (on) {
-            var alpha = past ? 1 : 0.38
-            if (r >= litBefore) alpha *= reveal
-            ctx.fillStyle = Qt.rgba(ac.r, ac.g, ac.b, alpha)
-            if (r >= litBefore && reveal < 1) {
-              ctx.fillStyle = Qt.rgba(fg.r, fg.g, fg.b, 0.05)
-              ctx.fillRect(x, y, root.cell, root.cell)
-              ctx.fillStyle = Qt.rgba(ac.r, ac.g, ac.b, alpha)
-            }
-          } else {
-            ctx.fillStyle = Qt.rgba(fg.r, fg.g, fg.b, 0.05)
-          }
+          var wasOn = r < litBefore
+          // Resting grid first; lit cells paint over it.
+          ctx.fillStyle = Qt.rgba(fg.r, fg.g, fg.b, 0.05)
           ctx.fillRect(x, y, root.cell, root.cell)
+          if (on || (wasOn && reveal < 1)) {
+            var alpha = past ? 1 : 0.38
+            if (on && !wasOn) alpha *= reveal          // new: fade in
+            else if (!on && wasOn) alpha *= 1 - reveal  // removed: fade out
+            ctx.fillStyle = Qt.rgba(ac.r, ac.g, ac.b, alpha)
+            ctx.fillRect(x, y, root.cell, root.cell)
+          }
         }
       }
-      root.lastLevels = levels
+      if (reveal >= 1) root.lastLevels = levels
 
       // Bedtime limit: dashed line.
       var limitY = plotH - Math.round(root.bedtimeLimit / scaleMax * rows) * pitch

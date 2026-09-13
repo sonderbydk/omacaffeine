@@ -23,8 +23,9 @@ Requires Omarchy 4. No extra packages.
   icon that follows your theme. The most recent drink is highlighted;
   middle-click the bar icon or press Enter in the panel to log it again.
 - **The cup.** A mug that fills with coffee as today's intake approaches the
-  daily limit. Steam rises while there is caffeine in it. Past the limit the
-  crema turns your theme's urgent colour.
+  daily limit, or, if you prefer, with what is in your system right now so it
+  drains between cups. Empty at zero. Past the limit it goes into stack
+  overflow: the crema turns your theme's urgent colour and boils.
 - **Stats.** First caffeine today (or "Let's brew you some coffee — you
   deserve it!"), today's total as mg and percent with the number of drinks,
   how much is in your system right now, when you will be caffeine-free, and

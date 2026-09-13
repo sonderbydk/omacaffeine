@@ -28,7 +28,8 @@
       "bedtime": "23:00",
       "dailyLimitMg": 400,
       "bedtimeLimitMg": 100,
-      "barDisplay": "Icon"
+      "barDisplay": "Icon",
+      "cupMode": "Today's intake"
     },
     "schema": [
       {
@@ -79,6 +80,17 @@
         "step": 5,
         "defaultValue": 100,
         "description": "How much may still be in your system at bedtime. EFSA notes 100 mg close to bedtime may affect sleep."
+      },
+      {
+        "key": "cupMode",
+        "type": "enum",
+        "label": "Cup shows",
+        "options": [
+          "Today's intake",
+          "In your system"
+        ],
+        "defaultValue": "Today's intake",
+        "description": "Whether the cup fills with today's total or with what is currently in your system."
       },
       {
         "key": "barDisplay",

@@ -14,16 +14,29 @@ Item {
   property int pauseMs: 1400
   property real pixelsPerSecond: 28
 
-  readonly property alias implicitTextWidth: label.implicitWidth
-  readonly property alias baselineOffset: label.baselineOffset
-  readonly property bool overflowing: label.implicitWidth > width + 0.5
+  // Breathing room on both sides while gliding, so a text that only just
+  // overflows still travels a visible distance.
+  readonly property string glidePad: "   "
+  readonly property bool overflowing: probe.implicitWidth > width + 0.5
 
   height: label.implicitHeight
+  baselineOffset: label.baselineOffset
   clip: true
+
+  // Measures the unpadded text so padding never causes the overflow itself.
+  Text {
+    id: probe
+    visible: false
+    text: root.text
+    font.family: root.fontFamily
+    font.pixelSize: root.pixelSize
+    font.bold: root.bold
+    textFormat: Text.PlainText
+  }
 
   Text {
     id: label
-    text: root.text
+    text: root.overflowing ? root.glidePad + root.text + root.glidePad : root.text
     color: root.color
     font.family: root.fontFamily
     font.pixelSize: root.pixelSize

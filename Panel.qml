@@ -48,6 +48,7 @@ Panel {
   readonly property real halfLife: Model.halfLifeHours(activity)
   readonly property int recommendedDaily: Model.recommendedDailyLimit(bodyWeightKg)
   readonly property int singleDose: Model.singleDoseLimit(bodyWeightKg)
+  readonly property string cupMode: String(setting("cupMode", "Today's intake"))
   readonly property bool imperial: Model.usesImperialWeight()
   readonly property string weightUnit: imperial ? "lb" : "kg"
   readonly property int weightShown: imperial ? Model.kgToLb(bodyWeightKg) : bodyWeightKg
@@ -57,6 +58,9 @@ Panel {
   readonly property int todayMg: Model.totalMg(today)
   readonly property int todayPercent: Math.round(todayMg / dailyLimitMg * 100)
   readonly property real level: todayMg / dailyLimitMg
+  readonly property bool cupShowsBody: cupMode === "In your system"
+  readonly property real cupLevel: cupShowsBody ? inBodyMg / dailyLimitMg : level
+  readonly property int cupPercent: Math.round(cupLevel * 100)
   readonly property bool overLimit: todayMg > dailyLimitMg
   readonly property var first: Model.firstDrink(today)
   readonly property var last: Model.lastDrink(log.drinks)
@@ -406,12 +410,14 @@ Panel {
               height: Style.space(160)
               anchors.left: parent.left
               anchors.verticalCenter: parent.verticalCenter
-              level: root.level
+              level: root.cupLevel
               foreground: root.foreground
               urgent: root.urgent
               fontFamily: root.fontFamily
-              label: root.todayPercent + "%"
-              sublabel: root.overLimit ? "stack overflow" : root.todayMg + " / " + root.dailyLimitMg + " mg"
+              label: root.cupPercent + "%"
+              sublabel: root.cupLevel > 1 ? "stack overflow"
+                : (root.cupShowsBody ? root.inBodyMg + " mg in you"
+                  : root.todayMg + " / " + root.dailyLimitMg + " mg")
             }
 
             Column {
@@ -813,6 +819,33 @@ Panel {
               text: "BAR"
               foreground: root.foreground
               fontFamily: root.fontFamily
+            }
+
+            Column {
+              width: parent.width
+              spacing: Style.space(4)
+              Text {
+                text: "Cup shows"
+                color: root.foreground
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.body
+              }
+              ButtonGroup {
+                options: ["Today's intake", "In your system"]
+                value: root.cupMode
+                foreground: root.foreground
+                accent: root.accent
+                fontFamily: root.fontFamily
+                onChanged: function(v) { root.saveSetting("cupMode", v) }
+              }
+              Text {
+                width: parent.width
+                text: "Today's intake fills up as you drink. In your system follows the half-life and drains between cups."
+                color: root.dim
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+                wrapMode: Text.WordWrap
+              }
             }
 
             Column {

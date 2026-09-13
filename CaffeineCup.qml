@@ -33,6 +33,9 @@ Item {
   readonly property real bodyTop: bodyBottom - bodyH
   readonly property real lineW: Math.max(2, bodyW * 0.035)
 
+  // Bound, never assigned: the cup always tracks the level. The Behavior is
+  // switched on after the first frame so opening the panel does not animate
+  // the liquid up from empty.
   property real shownLevel: clampedLevel
   property bool animate: false
   property real phase: 0
@@ -42,11 +45,7 @@ Item {
     enabled: root.animate
     NumberAnimation { duration: 700; easing.type: Easing.InOutCubic }
   }
-  // First paint shows the real level without an animation from empty.
-  Component.onCompleted: {
-    shownLevel = clampedLevel
-    animate = true
-  }
+  Component.onCompleted: Qt.callLater(function() { root.animate = true })
   onShownLevelChanged: canvas.requestPaint()
   onForegroundChanged: canvas.requestPaint()
   onOverLimitChanged: canvas.requestPaint()
