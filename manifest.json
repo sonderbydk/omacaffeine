@@ -5,7 +5,7 @@
   "version": "0.4.0",
   "author": "Peter Sønderby",
   "license": "MIT",
-  "description": "Caffeine tracker for the Omarchy bar: log your espresso, tea or energy drink (or your own), watch the cup fill up, know when to stop so you still sleep tonight, and see how the week's milligrams line up with your agents' tokens.",
+  "description": "Track your caffeine so you peak while you code and still sleep tonight: log a cup, watch the mug fill, get a bedtime cut-off, and see how your week's milligrams line up with your coding agents' tokens. Made with love for coders, coffee and Omarchy.",
   "kinds": [
     "bar-widget"
   ],
@@ -14,7 +14,7 @@
   },
   "barWidget": {
     "displayName": "OmaCaffeine",
-    "description": "Caffeine tracker with a cup that fills up, half-life model and a bedtime cut-off.",
+    "description": "Caffeine tracker with a cup that fills up, a half-life model, a bedtime cut-off and a weekly caffeine × tokens view.",
     "category": "Health",
     "aliases": [
       "caffeine",

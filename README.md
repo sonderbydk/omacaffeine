@@ -1,11 +1,16 @@
 # OmaCaffeine
 
-**Caffeine tracking for the Omarchy bar — because good code is written on
-caffeine, and good sleep is written on knowing when to stop.**
+**Made with love for coders, coffee and Omarchy.**
 
-A coffee glyph in the bar drops down a small tracker: pick what you are
-drinking, watch the cup fill up towards your daily limit, and see the latest
-time for one more cup so the caffeine left at bedtime stays under your limit.
+A coffee glyph in your Omarchy bar. Click it and a small tracker drops down:
+log what you are drinking, watch a mug fill up towards your daily limit, and
+see the latest time you can have one more cup and still sleep tonight. Peak
+while you code, sleep when you should, and learn, over a week, how your
+milligrams line up with the tokens your coding agents produce.
+
+<p align="center">
+  <img src="preview.png" alt="OmaCaffeine: the panel with the cup, drink grid and timeline next to the week page with seven cups, token bars and the caffeine-times-tokens chart" width="960">
+</p>
 
 ## Install
 
@@ -13,59 +18,66 @@ time for one more cup so the caffeine left at bedtime stays under your limit.
 omarchy plugin add https://github.com/sonderbydk/omacaffeine.git --enable
 ```
 
-Requires Omarchy 4. No extra packages.
+Requires Omarchy 4. No sudo or pkexec is required, nothing is downloaded at
+runtime, and nothing leaves your machine.
 
-## What it does
+## Why
 
-- **One-click logging** of sixteen drinks — Espresso, Doppio, Americano,
-  Cappuccino, Latte, Flat White, Filter, Cold Brew, Decaf, Black Tea, Green
-  Tea, Matcha, Cola, Red Bull, Monster and Nitro — each with a single-colour
-  outline icon that follows your theme. The most recent drink is highlighted;
-  middle-click the bar icon or press Enter in the panel to log it again.
-- **Your own drinks.** The "+ Create my own" tiles take a name, the mg and
-  one of 23 icons. Right-click any preset to give it your own mg ("my
-  espresso is a double") and reset it to the default later; settings can
-  reset every preset at once.
-- **Forgot one?** Click the timeline where the cup should have been and pick
-  the drink; it lands in the log at that time and the graph redraws.
-- **The cup.** A mug that fills with coffee as today's intake approaches the
-  daily limit, or, if you prefer, with what is in your system right now so it
-  drains between cups. Empty at zero. Past the limit it goes into stack
-  overflow: the crema turns your theme's urgent colour and boils.
-- **Stats.** First caffeine today (or "Let's brew you some coffee — you
-  deserve it!"), today's total as mg and percent with the number of drinks,
-  how much is in your system right now, when you will be caffeine-free, and
-  how much will still be in your blood at bedtime.
-- **Cut-off.** A half-life model tells you the latest time you can have one
-  more of your usual drink and still be under your bedtime limit. If that time
-  has passed you get told to switch to decaf.
-- **Timeline.** A pixel graph in your theme's colours: caffeine in your
-  system so far, the predicted decay from now, the bedtime limit and bedtime
-  itself.
-- **The week.** Its own page (chart icon): seven small cups with the mg and
-  cups per day, the average, the trend, and, underneath each day, the output
-  tokens your coding agents produced (Claude Code and Codex transcripts on
-  this machine). A second chart groups active hours by how much caffeine was
-  in your system and shows the tokens per hour for each band, so you can see
-  your sweet spot and the correlation. Correlation, not causation.
-- **Your clock, your units.** Times follow the Omarchy clock widget's format
-  (24-hour unless your clock shows AM/PM) and weight is shown in pounds for
-  imperial locales.
-- **Settings** on their own page (gear icon, Esc or Back returns): body
-  weight (for the recommended limit), typical activity (sitting, standing,
-  moving around), optimal bedtime, daily limit, allowed caffeine at bedtime,
-  and whether the bar shows an icon, milligrams or percent.
-- **Nerd mode is always on.** The drink grid greets you with a fresh heading
-  ("Choose your weapon, code warrior"), the footer serves a pun, and past
-  100 % the cup goes into stack overflow with a boiling crema.
+Caffeine has a half-life of about five hours. The espresso at 16:00 is still
+half there at 21:00 and a quarter there at 02:00. OmaCaffeine does that
+arithmetic for you, all day, and turns it into three things you can act on:
+how full you are, how much will still be in your blood at bedtime, and the
+cut-off time for one more of your usual.
+
+## What you get
+
+**The cup.** A mug that fills with coffee as today's intake approaches your
+daily limit, or, if you prefer, with what is in your system right now so it
+drains between cups. Logging pours: a stream falls in, the surface swells and
+settles, the number counts up. Past the limit it is a stack overflow: the
+crema boils in your theme's urgent colour and drips run down the outside.
+
+**One-click logging** of sixteen drinks, Espresso to Nitro, each with an
+outline icon in your theme's colours. The last drink is highlighted; press
+Enter, middle-click the bar icon or bind a hotkey to have it again.
+
+**Your own drinks.** The "+ Create my own" tiles take a name, the mg and one
+of 23 icons. Your espresso is a double? Right-click any preset and give it
+your own mg; reset it later with one click.
+
+**Forgot one?** Click the timeline where the cup should have been, pick the
+drink, and it lands in the log at that time.
+
+**The cut-off.** "Cut-off 15:40 for another Flat White", "Clear for bedtime",
+or "Past cut-off · decaf from here". Set your bedtime and how much caffeine
+may still be in your system when you go to bed; the model does the rest.
+
+**The timeline.** A pixel graph of caffeine in your body: what today's cups
+did so far, the predicted decay from now, the bedtime limit and bedtime
+itself.
+
+**The week.** Seven small cups with the mg and cups per day, the average, the
+trend, and, under each day, the output tokens your coding agents produced
+(read locally from Claude Code and Codex transcripts). A second chart groups
+your active hours by how much caffeine was in your system and shows the tokens
+per hour for each band, so you can find your sweet spot and see the
+correlation. Correlation, not causation, and the page says so.
+
+**Your clock, your units.** Times follow the Omarchy clock widget (24-hour
+unless your clock shows AM/PM); weight is shown in pounds for imperial
+locales. Every colour comes from your theme; only the coffee is brown.
+
+**Nerd mode is always on.** The drink grid greets you with a fresh heading
+("Choose your weapon, code warrior"), the week page is a "Weekly sprint
+retrospective", and the footer serves a pun.
 
 ## The model
 
 Caffeine follows first-order elimination: every drink decays independently
 with the same half-life. The half-life depends on the activity setting
 (5 h sitting, 4.75 h standing, 4.5 h moving); adults average about 5 hours
-with a range of roughly 3 to 7. Each drink is treated as fully absorbed when logged,
-which errs on the safe side for the cut-off.
+with a range of roughly 3 to 7. Each drink is treated as fully absorbed when
+logged, which errs on the safe side for the cut-off.
 
 Limits follow EFSA guidance: 400 mg per day (about 5.7 mg per kg) and 200 mg
 per single dose carry no safety concern for healthy adults, and 100 mg close
@@ -92,6 +104,7 @@ when `D > L - C`; otherwise the drink fits at any time before bed.
 | Log back in time | `omarchy shell -q io.github.sonderbydk.omacaffeine logAt espresso 09:00` |
 | Undo | `omarchy shell -q io.github.sonderbydk.omacaffeine undo` |
 | Week page | `omarchy shell -q io.github.sonderbydk.omacaffeine week` |
+| Edit a drink / create one | `omarchy shell -q io.github.sonderbydk.omacaffeine edit espresso` / `edit new` |
 | Status line | `omarchy shell io.github.sonderbydk.omacaffeine status` |
 
 A Hyprland binding for the espresso addict:
@@ -101,14 +114,21 @@ o.bind("SUPER + SHIFT + C", "Log espresso",
   "omarchy shell -q io.github.sonderbydk.omacaffeine log espresso")
 ```
 
-## Files
+## Files and privacy
 
 - `~/.local/state/omacaffeine/log.json` — the drink log (last eight days).
 - `~/.config/omacaffeine/drinks.json` — your own drinks and preset mg overrides.
-- Token counts come from `~/.claude/projects/**/*.jsonl` and
-  `~/.codex/sessions/**/*.jsonl`, read locally by `tokens.py`; nothing leaves
-  the machine.
 - Settings live inline on the widget's entry in `~/.config/omarchy/shell.json`
   and can be changed with `omarchy bar set io.github.sonderbydk.omacaffeine bedtime 22:30`.
+- The week page's token counts come from `~/.claude/projects/**/*.jsonl` and
+  `~/.codex/sessions/**/*.jsonl`, read locally by the bundled `tokens.py`
+  (Python 3, part of every Omarchy install). Only per-hour token totals are
+  kept in memory; no transcript content is stored or sent anywhere.
+
+## Developing
+
+No build step. `dev/harness.sh` renders the components in a standalone
+Quickshell window; `dev/model-test.js` is a Node smoke test for the model.
+See `CLAUDE.md` for the layout and the deploy loop.
 
 MIT licensed. Brewed with Claude Code.
