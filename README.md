@@ -19,7 +19,17 @@ omarchy plugin add https://github.com/sonderbydk/omacaffeine.git --enable
 ```
 
 Requires Omarchy 4. No sudo or pkexec is required, nothing is downloaded at
-runtime, and nothing leaves your machine.
+runtime, and nothing leaves your machine. The only runtime dependency is
+Python 3 (standard library only), which every Omarchy install has.
+
+To remove it again:
+
+```bash
+omarchy plugin remove io.github.sonderbydk.omacaffeine
+```
+
+That deletes the plugin; your log in `~/.local/state/omacaffeine/` and your
+own drinks in `~/.config/omacaffeine/` stay until you delete them.
 
 ## Why
 
