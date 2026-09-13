@@ -4,8 +4,8 @@
 caffeine, and good sleep is written on knowing when to stop.**
 
 A coffee glyph in the bar drops down a small tracker: pick what you are
-drinking, watch the cup fill up towards your daily limit, and see the exact
-time you should stop so the caffeine is out of your system by bedtime.
+drinking, watch the cup fill up towards your daily limit, and see the latest
+time for one more cup so the caffeine left at bedtime stays under your limit.
 
 ## Install
 

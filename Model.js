@@ -34,6 +34,152 @@ var ICON_KINDS = [
   "mug", "tumbler", "bottle", "shot", "mate", "chocolate", "pill"
 ]
 
+// Outline icons as SVG subpaths in a 24x24 box, drawn by DrinkIcon.qml.
+// Shared here so the ~50 icon instances do not each allocate the table.
+var ICON_PATHS = {
+  "espresso": [
+    "M5 9 H16 V14.5 A4.5 4.5 0 0 1 11.5 19 H9.5 A4.5 4.5 0 0 1 5 14.5 Z",
+    "M16 10.5 H17.5 A2.5 2.5 0 0 1 17.5 15.5 H16",
+    "M3 21 H19",
+    "M8 6.5 C8 5 9.5 5 9.5 3.5",
+    "M11.5 6.5 C11.5 5 13 5 13 3.5"
+  ],
+  "doppio": [
+    "M2.5 10 H11.5 V13.5 A3.5 3.5 0 0 1 8 17 H6 A3.5 3.5 0 0 1 2.5 13.5 Z",
+    "M12.5 10 H21.5 V13.5 A3.5 3.5 0 0 1 18 17 H16 A3.5 3.5 0 0 1 12.5 13.5 Z",
+    "M2 20.5 H22",
+    "M6 7.5 C6 6 7.5 6 7.5 4.5",
+    "M16 7.5 C16 6 17.5 6 17.5 4.5"
+  ],
+  "americano": [
+    "M6 7.5 H18 L16.5 21 H7.5 Z",
+    "M4.5 7.5 H19.5",
+    "M6.5 4.5 H17.5 V7.5",
+    "M8.5 12 C10 11 14 13 15.5 12"
+  ],
+  "cappuccino": [
+    "M4 11 H17 V15 A4.5 4.5 0 0 1 12.5 19.5 H8.5 A4.5 4.5 0 0 1 4 15 Z",
+    "M17 12.5 H18.5 A2.5 2.5 0 0 1 18.5 17.5 H17",
+    "M5 11 C5 6 16 6 16 11",
+    "M8 8.5 C9 7.5 12 7.5 13 8.5",
+    "M3 22 H19"
+  ],
+  "latte": [
+    "M7 4 H17 L16 21 H8 Z",
+    "M7.6 10 H16.4",
+    "M8.3 16 H15.7",
+    "M17 6.5 H18.5 A2.5 2.5 0 0 1 18.5 11.5 H16.5"
+  ],
+  "flat-white": [
+    "M4 10 H17 V15 A4.5 4.5 0 0 1 12.5 19.5 H8.5 A4.5 4.5 0 0 1 4 15 Z",
+    "M17 11.5 H18.5 A2.5 2.5 0 0 1 18.5 16.5 H17",
+    "M10.5 18 C7.5 15.5 8 13 10.5 11.5 C13 13 13.5 15.5 10.5 18 Z",
+    "M10.5 11.5 V18",
+    "M3 22 H19"
+  ],
+  "coffee": [
+    "M4 8 H17 V16 A4 4 0 0 1 13 20 H8 A4 4 0 0 1 4 16 Z",
+    "M17 10 H18.5 A3 3 0 0 1 18.5 16 H17",
+    "M8 5.5 C8 4 9.5 4 9.5 2.5",
+    "M12 5.5 C12 4 13.5 4 13.5 2.5"
+  ],
+  "cold-brew": [
+    "M6 4 H18 L17 21 H7 Z",
+    "M8.5 8 H11.5 V11 H8.5 Z",
+    "M12.5 11.5 H15.5 V14.5 H12.5 Z",
+    "M13.5 4 L16.5 1.5"
+  ],
+  "decaf": [
+    "M4 10 H17 V15 A4.5 4.5 0 0 1 12.5 19.5 H8.5 A4.5 4.5 0 0 1 4 15 Z",
+    "M17 11.5 H18.5 A2.5 2.5 0 0 1 18.5 16.5 H17",
+    "M3 22 H19",
+    "M12.5 2.5 A3.2 3.2 0 1 0 15.5 6.5 A2.4 2.4 0 0 1 12.5 2.5 Z"
+  ],
+  "black-tea": [
+    "M4 10 H17 V15 A4.5 4.5 0 0 1 12.5 19.5 H8.5 A4.5 4.5 0 0 1 4 15 Z",
+    "M17 11.5 H18.5 A2.5 2.5 0 0 1 18.5 16.5 H17",
+    "M3 22 H19",
+    "M13 10 L15.5 4.5 H19",
+    "M19 3 H21 V6 H19 Z"
+  ],
+  "green-tea": [
+    "M5 9 H19 L17.5 18 A2.5 2.5 0 0 1 15 20 H9 A2.5 2.5 0 0 1 6.5 18 Z",
+    "M8 9 C8 6 11 5 12 3.5 C13 5 16 6 16 9",
+    "M12 3.5 V9"
+  ],
+  "matcha": [
+    "M3.5 11 H20.5 C20.5 16 17 20 12 20 C7 20 3.5 16 3.5 11 Z",
+    "M15 11 V4.5 M13.5 4.5 H16.5",
+    "M15 4.5 L12.5 9 M15 4.5 L15 9 M15 4.5 L17.5 9",
+    "M6 13 C8 12 10 12 12 13"
+  ],
+  "cola": [
+    "M9.5 2.5 H14.5 V5.5 L16.5 9 V19.5 A2 2 0 0 1 14.5 21.5 H9.5 A2 2 0 0 1 7.5 19.5 V9 L9.5 5.5 Z",
+    "M8.5 2.5 H15.5",
+    "M7.5 12 C10 11 14 13 16.5 12",
+    "M7.5 15 C10 14 14 16 16.5 15"
+  ],
+  "red-bull": [
+    "M8 4.5 H16 V19.5 A2 2 0 0 1 14 21.5 H10 A2 2 0 0 1 8 19.5 Z",
+    "M8 4.5 C8 3 9 2.5 10 2.5 H14 C15 2.5 16 3 16 4.5",
+    "M10.5 9 L13.5 12 L10.5 15",
+    "M8 17.5 H16"
+  ],
+  "monster": [
+    "M7 4.5 H17 V19.5 A2 2 0 0 1 15 21.5 H9 A2 2 0 0 1 7 19.5 Z",
+    "M7 4.5 C7 3 8 2.5 9 2.5 H15 C16 2.5 17 3 17 4.5",
+    "M9 8 L10.5 16",
+    "M12 7 L12.5 16.5",
+    "M15 8 L14 16"
+  ],
+  // Nitro: a tall can with a nitrogen widget bubble trail.
+  "nitro": [
+    "M8 4.5 H16 V19.5 A2 2 0 0 1 14 21.5 H10 A2 2 0 0 1 8 19.5 Z",
+    "M8 4.5 C8 3 9 2.5 10 2.5 H14 C15 2.5 16 3 16 4.5",
+    "M10.5 17.5 A1 1 0 1 0 10.5 15.5 A1 1 0 1 0 10.5 17.5 Z",
+    "M13.5 13.5 A1 1 0 1 0 13.5 11.5 A1 1 0 1 0 13.5 13.5 Z",
+    "M11 9.5 A1 1 0 1 0 11 7.5 A1 1 0 1 0 11 9.5 Z"
+  ],
+  // Generic vessels for custom drinks.
+  "mug": [
+    "M4 8 H17 V16 A4 4 0 0 1 13 20 H8 A4 4 0 0 1 4 16 Z",
+    "M17 10 H18.5 A3 3 0 0 1 18.5 16 H17"
+  ],
+  "tumbler": [
+    "M7 7 H17 L16 21 H8 Z",
+    "M5.5 7 H18.5 V4.5 H5.5 Z",
+    "M13.5 4.5 V2.5 H15.5",
+    "M8 12 H16"
+  ],
+  "bottle": [
+    "M10 2.5 H14 V6 C14 8 16 8.5 16 11 V20 A1.5 1.5 0 0 1 14.5 21.5 H9.5 A1.5 1.5 0 0 1 8 20 V11 C8 8.5 10 8 10 6 Z",
+    "M9.5 2.5 H14.5",
+    "M8 13 H16",
+    "M8 17 H16"
+  ],
+  "shot": [
+    "M8 7 H16 L14.8 20 H9.2 Z",
+    "M6.5 7 H17.5",
+    "M9 14 H15"
+  ],
+  "mate": [
+    "M7 10 C5 13 5.5 20 12 20 C18.5 20 19 13 17 10 C16 8.5 8 8.5 7 10 Z",
+    "M8 13.5 C10 12.5 14 12.5 16 13.5",
+    "M13.5 9 L18.5 3",
+    "M17 2 L20 5"
+  ],
+  "chocolate": [
+    "M4 5 H20 V19 H4 Z",
+    "M9.3 5 V19",
+    "M14.6 5 V19",
+    "M4 12 H20"
+  ],
+  "pill": [
+    "M4.5 14.5 L14.5 4.5 A3.54 3.54 0 0 1 19.5 9.5 L9.5 19.5 A3.54 3.54 0 0 1 4.5 14.5 Z",
+    "M9.5 9.5 L14.5 14.5"
+  ]
+}
+
 var ACTIVITIES = ["Sitting", "Standing", "Moving around"]
 
 // Caffeine half-life in healthy adults averages about 5 hours (range roughly
@@ -146,29 +292,40 @@ function emptyDrinksConfig() {
   return { version: 1, custom: [], overrides: {} }
 }
 
-function parseDrinksConfig(raw) {
+// Strict like parseLogOrNull. Custom kinds must be unique and must not
+// collide with a preset, or the grid would resolve them to the wrong drink.
+function parseDrinksConfigOrNull(raw) {
+  var text = String(raw || "").trim()
+  if (text === "") return emptyDrinksConfig()
+  var parsed
+  try { parsed = JSON.parse(text) } catch (e) { return null }
+  if (!parsed || typeof parsed !== "object") return null
+  if (parsed.version !== undefined && parsed.version !== 1) return null
   var config = emptyDrinksConfig()
-  try {
-    var parsed = JSON.parse(String(raw || ""))
-    if (!parsed || typeof parsed !== "object") return config
-    if (Array.isArray(parsed.custom)) {
-      for (var i = 0; i < parsed.custom.length; i++) {
-        var c = parsed.custom[i]
-        if (!c || !c.kind || !isFinite(Number(c.mg))) continue
-        config.custom.push({ kind: String(c.kind), name: String(c.name || "My drink"),
-          mg: Math.max(0, Math.round(Number(c.mg))),
-          icon: ICON_KINDS.indexOf(String(c.icon)) >= 0 ? String(c.icon) : "mug" })
-      }
+  var seen = {}
+  if (Array.isArray(parsed.custom)) {
+    for (var i = 0; i < parsed.custom.length; i++) {
+      var c = parsed.custom[i]
+      if (!c || typeof c !== "object" || !c.kind) continue
+      var kind = String(c.kind)
+      var mg = cleanMg(c.mg)
+      if (mg === null || isPreset(kind) || seen[kind]) continue
+      seen[kind] = true
+      config.custom.push({ kind: kind, name: cleanName(c.name, "My drink"), mg: mg,
+        icon: ICON_KINDS.indexOf(String(c.icon)) >= 0 ? String(c.icon) : "mug" })
     }
-    if (parsed.overrides && typeof parsed.overrides === "object") {
-      for (var kind in parsed.overrides) {
-        var mg = Number(parsed.overrides[kind])
-        if (isPreset(kind) && isFinite(mg) && mg >= 0 && Math.round(mg) !== preset(kind).mg)
-          config.overrides[kind] = Math.round(mg)
-      }
+  }
+  if (parsed.overrides && typeof parsed.overrides === "object") {
+    for (var k in parsed.overrides) {
+      var over = cleanMg(parsed.overrides[k])
+      if (isPreset(k) && over !== null && over !== preset(k).mg) config.overrides[k] = over
     }
-  } catch (e) {}
+  }
   return config
+}
+
+function parseDrinksConfig(raw) {
+  return parseDrinksConfigOrNull(raw) || emptyDrinksConfig()
 }
 
 function serializeDrinksConfig(config) {
@@ -277,6 +434,13 @@ function formatTime(date, fmt) {
   }
 }
 
+// Calendar arithmetic through the Date constructor, so a day is a calendar
+// day and not 24 hours: DST changes do not shift midnight or bedtime.
+function addDays(date, n) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate() + n,
+    date.getHours(), date.getMinutes(), date.getSeconds(), date.getMilliseconds())
+}
+
 function sameDay(a, b) {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth()
     && a.getDate() === b.getDate()
@@ -287,18 +451,10 @@ function formatTimeFrom(date, now, fmt) {
   if (!date) return "—"
   var time = formatTime(date, fmt)
   if (sameDay(date, now)) return time
-  var tomorrow = new Date(now.getTime() + 24 * 3600 * 1000)
-  if (sameDay(date, tomorrow)) return time + " tomorrow"
+  if (sameDay(date, addDays(now, 1))) return time + " tomorrow"
   return time + " in " + Math.round((date - now) / 3600000) + " h"
 }
 
-function usesTwelveHourClock() {
-  try {
-    return /a/i.test(Qt.locale().timeFormat(1))
-  } catch (e) {
-    return false
-  }
-}
 
 function usesImperialWeight() {
   try {
@@ -326,14 +482,6 @@ function dayLabel(date) {
   }
 }
 
-function formatDuration(ms) {
-  var minutes = Math.max(0, Math.round(ms / 60000))
-  var hours = Math.floor(minutes / 60)
-  var rest = minutes % 60
-  if (hours <= 0) return rest + " min"
-  if (rest === 0) return hours + " h"
-  return hours + " h " + rest + " min"
-}
 
 // ---- bedtime ---------------------------------------------------------------
 
@@ -345,6 +493,7 @@ function parseBedtime(text) {
   var h = parseInt(match[1], 10)
   var m = match[2] ? parseInt(match[2], 10) : 0
   var suffix = match[3] ? match[3].toLowerCase().charAt(0) : ""
+  if (suffix && (h < 1 || h > 12)) return null
   if (suffix === "p" && h < 12) h += 12
   if (suffix === "a" && h === 12) h = 0
   if (h > 23 || m > 59) return null
@@ -369,8 +518,7 @@ function bedtimeAsDate(text, now) {
 // means tonight's has passed, so the next one is tomorrow.
 function nextBedtime(now, bedtimeText) {
   var candidate = bedtimeAsDate(bedtimeText, now)
-  if (candidate.getTime() <= now.getTime())
-    candidate = new Date(candidate.getTime() + 24 * 3600 * 1000)
+  if (candidate.getTime() <= now.getTime()) candidate = addDays(candidate, 1)
   return candidate
 }
 
@@ -385,13 +533,14 @@ function drinkTime(drink) {
   return t && !isNaN(t.getTime()) ? t : null
 }
 
-function todaysDrinks(drinks, now) {
-  var start = startOfDay(now).getTime()
+// Every drink on the calendar day containing `at`, oldest first.
+function todaysDrinks(drinks, at) {
+  var start = startOfDay(at).getTime()
+  var end = addDays(startOfDay(at), 1).getTime()
   var list = []
   for (var i = 0; i < (drinks || []).length; i++) {
     var t = drinkTime(drinks[i])
-    if (t && t.getTime() >= start && t.getTime() <= now.getTime() + 60000)
-      list.push(drinks[i])
+    if (t && t.getTime() >= start && t.getTime() < end) list.push(drinks[i])
   }
   list.sort(function(a, b) { return drinkTime(a) - drinkTime(b) })
   return list
@@ -437,7 +586,8 @@ function inBody(drinks, at, halfLifeHrs) {
 }
 
 // Earliest time at or after `from` when the body level is at or below
-// `limit`. Scans in five-minute steps for up to two days.
+// `limit`. Scans in five-minute steps for up to two days; null when it is
+// not reached in that window.
 function timeUntilBelow(drinks, from, halfLifeHrs, limit) {
   var step = 5 * 60000
   var t = from.getTime()
@@ -446,7 +596,7 @@ function timeUntilBelow(drinks, from, halfLifeHrs, limit) {
     if (inBody(drinks, at, halfLifeHrs) <= limit) return at
     t += step
   }
-  return new Date(t)
+  return null
 }
 
 // Cut-off for one more `doseMg` today so that caffeine at bedtime stays at
@@ -462,12 +612,14 @@ function cutoff(drinks, now, bedtimeText, halfLifeHrs, limitAtBed, doseMg) {
   var current = inBody(drinks, bed, hl)
   var dose = Math.max(0, Number(doseMg) || 0)
   var headroom = limitAtBed - current
-  if (headroom <= 0) {
+  if (current > limitAtBed) {
     return { status: "over", time: timeUntilBelow(drinks, bed, hl, limitAtBed),
       bedtime: bed, atBedtime: current }
   }
   if (dose <= headroom)
     return { status: "clear", time: bed, bedtime: bed, atBedtime: current }
+  if (headroom <= 0)
+    return { status: "passed", time: bed, bedtime: bed, atBedtime: current }
   var hoursBefore = hl * Math.log(dose / headroom) / Math.LN2
   var latest = new Date(bed.getTime() - hoursBefore * 3600000)
   if (latest.getTime() <= now.getTime())
@@ -475,14 +627,6 @@ function cutoff(drinks, now, bedtimeText, halfLifeHrs, limitAtBed, doseMg) {
   return { status: "until", time: latest, bedtime: bed, atBedtime: current }
 }
 
-// Body level sampled every `stepMinutes` from `from` to `to` (inclusive).
-function timeline(drinks, from, to, stepMinutes, halfLifeHrs) {
-  var points = []
-  var step = Math.max(1, stepMinutes) * 60000
-  for (var t = from.getTime(); t <= to.getTime(); t += step)
-    points.push({ t: t, mg: inBody(drinks, new Date(t), halfLifeHrs) })
-  return points
-}
 
 // ---- week ------------------------------------------------------------------
 
@@ -491,8 +635,8 @@ function dayTotals(drinks, now, days) {
   var list = []
   var todayStart = startOfDay(now)
   for (var i = days - 1; i >= 0; i--) {
-    var start = new Date(todayStart.getTime() - i * 24 * 3600 * 1000)
-    var end = new Date(start.getTime() + 24 * 3600 * 1000)
+    var start = addDays(todayStart, -i)
+    var end = addDays(start, 1)
     var mg = 0, count = 0
     for (var d = 0; d < (drinks || []).length; d++) {
       var t = drinkTime(drinks[d])
@@ -512,10 +656,28 @@ function hourKey(date) {
     + "T" + pad2(date.getHours())
 }
 
+// The 24 local hours of a calendar day. On a DST day one clock hour is
+// missing or doubled; the key set covers whatever exists.
+function hourKeysOfDay(dayStart) {
+  var keys = [], seen = {}
+  for (var h = 0; h < 24; h++) {
+    var key = hourKey(new Date(dayStart.getFullYear(), dayStart.getMonth(), dayStart.getDate(), h))
+    if (!seen[key]) { seen[key] = true; keys.push(key) }
+  }
+  return keys
+}
+
+// Inverse of hourKey for "YYYY-MM-DD" and "YYYY-MM-DDTHH" (local time).
+function dateFromKey(key) {
+  var m = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}))?$/.exec(String(key || ""))
+  if (!m) return new Date()
+  return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), m[4] ? Number(m[4]) : 0)
+}
+
 function tokensForDay(hours, dayStart) {
   var sum = 0
-  for (var h = 0; h < 24; h++)
-    sum += Number((hours || {})[hourKey(new Date(dayStart.getTime() + h * 3600000))]) || 0
+  var keys = hourKeysOfDay(dayStart)
+  for (var i = 0; i < keys.length; i++) sum += Number((hours || {})[keys[i]]) || 0
   return sum
 }
 
@@ -552,15 +714,24 @@ function slope(values) {
 // Every hour in the window where the agents produced tokens, paired with
 // the caffeine in the body at the middle of that hour. Hours without tokens
 // are left out on purpose: they say "not at the keyboard", not "no output".
+// The current, still running hour is left out too: its tokens so far
+// would be averaged against full hours.
 function activeHours(drinks, hours, now, days, halfLifeHrs) {
   var pairs = []
-  var from = startOfDay(now).getTime() - (days - 1) * 24 * 3600000
-  for (var t = from; t <= now.getTime(); t += 3600000) {
-    var start = new Date(t)
-    var tokens = Number((hours || {})[hourKey(start)]) || 0
-    if (tokens <= 0) continue
-    var mg = inBody(drinks, new Date(t + 1800000), halfLifeHrs)
-    pairs.push({ t: t, mg: mg, tokens: tokens })
+  var todayStart = startOfDay(now)
+  var currentKey = hourKey(now)
+  for (var i = days - 1; i >= 0; i--) {
+    var day = addDays(todayStart, -i)
+    for (var h = 0; h < 24; h++) {
+      var start = new Date(day.getFullYear(), day.getMonth(), day.getDate(), h)
+      if (start.getTime() > now.getTime()) break
+      var key = hourKey(start)
+      if (key === currentKey) break
+      var tokens = Number((hours || {})[key]) || 0
+      if (tokens <= 0) continue
+      var mg = inBody(drinks, new Date(start.getTime() + 1800000), halfLifeHrs)
+      pairs.push({ t: start.getTime(), mg: mg, tokens: tokens })
+    }
   }
   return pairs
 }
@@ -629,6 +800,11 @@ function weekHeading(seed) {
   return WEEK_HEADINGS[Math.abs(Math.floor(Number(seed) || 0)) % WEEK_HEADINGS.length]
 }
 
+// Icon glyph for a cut-off status (Material Design Nerd Font).
+function cutoffIcon(status) {
+  return status === "clear" ? "󰒲" : (status === "until" ? "󰔛" : "󰅜")
+}
+
 // Round to the nearest `minutes`, never after `now`.
 function snapTime(date, now, minutes) {
   var step = Math.max(1, minutes) * 60000
@@ -656,26 +832,49 @@ function emptyLog() {
   return { version: 1, drinks: [], lastKind: "espresso" }
 }
 
-function parseLog(raw) {
-  try {
-    var parsed = JSON.parse(String(raw || ""))
-    if (!parsed || typeof parsed !== "object") return emptyLog()
-    var log = emptyLog()
-    if (Array.isArray(parsed.drinks)) {
-      for (var i = 0; i < parsed.drinks.length; i++) {
-        var d = parsed.drinks[i]
-        if (!d || !d.t || !isFinite(Number(d.mg))) continue
-        var entry = { t: String(d.t), kind: String(d.kind || "coffee"),
-          name: String(d.name || preset(d.kind).name), mg: Number(d.mg) }
-        if (d.icon) entry.icon = String(d.icon)
-        log.drinks.push(entry)
-      }
-    }
-    if (parsed.lastKind) log.lastKind = String(parsed.lastKind)
-    return log
-  } catch (e) {
-    return emptyLog()
+var MAX_MG = 1000
+var MAX_NAME = 40
+
+function cleanName(value, fallback) {
+  var name = String(value || "").replace(/[\r\n\t]+/g, " ").trim()
+  return (name || fallback).slice(0, MAX_NAME)
+}
+
+function cleanMg(value) {
+  var mg = Number(value)
+  if (!isFinite(mg) || mg < 0) return null
+  return Math.min(MAX_MG, Math.round(mg))
+}
+
+// Strict: null for anything that is not a log we wrote (bad JSON, wrong
+// shape, unknown version). An empty file is a fresh log. Entries with a
+// bad time or mg are dropped individually.
+function parseLogOrNull(raw) {
+  var text = String(raw || "").trim()
+  if (text === "") return emptyLog()
+  var parsed
+  try { parsed = JSON.parse(text) } catch (e) { return null }
+  if (!parsed || typeof parsed !== "object" || !Array.isArray(parsed.drinks)) return null
+  if (parsed.version !== undefined && parsed.version !== 1) return null
+  var log = emptyLog()
+  for (var i = 0; i < parsed.drinks.length; i++) {
+    var d = parsed.drinks[i]
+    if (!d || typeof d !== "object") continue
+    var mg = cleanMg(d.mg)
+    if (!drinkTime(d) || mg === null) continue
+    var kind = String(d.kind || "coffee")
+    var entry = { t: String(d.t), kind: kind,
+      name: cleanName(d.name, isPreset(kind) ? preset(kind).name : "Drink"), mg: mg }
+    if (d.icon && ICON_KINDS.indexOf(String(d.icon)) >= 0) entry.icon = String(d.icon)
+    log.drinks.push(entry)
   }
+  if (parsed.lastKind) log.lastKind = String(parsed.lastKind)
+  return log
+}
+
+// Lenient: for cloning in-memory state, never for reading the file.
+function parseLog(raw) {
+  return parseLogOrNull(raw) || emptyLog()
 }
 
 // Keep eight days: a full week for the history page plus yesterday's tail
@@ -683,10 +882,11 @@ function parseLog(raw) {
 var KEEP_DAYS = 8
 function pruneLog(log, now) {
   var keepFrom = now.getTime() - KEEP_DAYS * 24 * 3600 * 1000
+  var keepTo = now.getTime() + 3600 * 1000   // an hour of clock skew, no more
   var kept = []
   for (var i = 0; i < log.drinks.length; i++) {
     var t = drinkTime(log.drinks[i])
-    if (t && t.getTime() >= keepFrom) kept.push(log.drinks[i])
+    if (t && t.getTime() >= keepFrom && t.getTime() <= keepTo) kept.push(log.drinks[i])
   }
   log.drinks = kept
   return log

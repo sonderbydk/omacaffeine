@@ -12,7 +12,12 @@ set -euo pipefail
 repo=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 shell_dir=${OMARCHY_PATH:-/usr/share/omarchy}/shell
 work=$(mktemp -d "${TMPDIR:-/tmp}/omacaffeine-harness.XXXXXX")
-trap 'rm -rf "$work"' EXIT
+qs=""
+cleanup() {
+  [[ -n $qs ]] && kill "$qs" 2>/dev/null && wait "$qs" 2>/dev/null
+  rm -rf "$work"
+}
+trap cleanup EXIT
 
 ln -s "$shell_dir/Commons" "$work/Commons"
 ln -s "$shell_dir/Ui" "$work/Ui"
@@ -22,7 +27,8 @@ done
 cp "$repo/dev/Harness.qml" "$work/shell.qml"
 
 if [[ $# -eq 0 ]]; then
-  exec quickshell -p "$work"
+  quickshell -p "$work"
+  exit $?
 fi
 
 out=$1
@@ -41,9 +47,8 @@ for c in json.load(open(sys.argv[1])):
         break
 PY
 )
-if [[ -n $geo ]]; then
-  grim -g "$geo" "$out" && echo "wrote $out"
-else
+if [[ -z $geo ]]; then
   echo "harness window not found" >&2
+  exit 1
 fi
-kill "$qs" 2>/dev/null || true
+grim -g "$geo" "$out" && echo "wrote $out"

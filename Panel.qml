@@ -18,16 +18,17 @@ Panel {
   property var anchorItem: null
   property var hostWidget: null
   property var shell: null
-  property bool openedFromHotkey: false
   readonly property var barIdentity: hostWidget || root
 
   // ---- state -------------------------------------------------------------
   property var log: Model.emptyLog()
   property var drinksConfig: Model.emptyDrinksConfig()
-  // Nothing is written back until the file has been read once: writing an
-  // empty in-memory log over a real one would erase the day.
+  // Nothing is written back until the file has been read and understood:
+  // writing an empty in-memory log over a real one would erase the day, and
+  // writing over a file we could not parse would destroy whatever it was.
   property bool logLoaded: false
   property bool drinksLoaded: false
+  property string lastError: ""
   property date now: new Date()
   property string page: "main"          // "main" | "settings" | "week" | "drink"
   property int seed: Math.floor(Math.random() * 1000)
@@ -46,8 +47,9 @@ Panel {
   property var lastLogged: null
 
   // Output tokens per hour from the coding agents, via tokens.py.
-  property var tokens: ({ hours: {}, sources: {} })
+  property var tokens: ({ hours: {}, sources: {}, skipped: 0 })
   property double tokensFetchedAt: 0
+  property string tokensState: "idle"      // idle | loading | ok | failed
 
   // Drink editor draft.
   property var editing: null            // { kind, custom, isNew }
@@ -78,6 +80,7 @@ Panel {
   readonly property int recommendedDaily: Model.recommendedDailyLimit(bodyWeightKg)
   readonly property int singleDose: Model.singleDoseLimit(bodyWeightKg)
   readonly property string cupMode: String(setting("cupMode", "Today's intake"))
+  readonly property string barDisplay: String(setting("barDisplay", "Icon"))
   readonly property bool imperial: Model.usesImperialWeight()
   readonly property string weightUnit: imperial ? "lb" : "kg"
   readonly property int weightShown: imperial ? Model.kgToLb(bodyWeightKg) : bodyWeightKg
@@ -93,17 +96,30 @@ Panel {
     for (var i = 0; i < pad; i++) list.push({ placeholder: true, kind: "new-" + i })
     return list
   }
-  readonly property var today: Model.todaysDrinks(log.drinks, now)
+  // Aggregates are keyed on the calendar day and hour rather than on `now`,
+  // so the 30 s clock does not rebuild lists while the panel is closed.
+  readonly property string dayKey: Model.hourKey(now).slice(0, 10)
+  readonly property string hourKeyNow: Model.hourKey(now)
+  readonly property date dayStart: Model.dateFromKey(dayKey)
+  readonly property date hourStart: Model.dateFromKey(hourKeyNow)
+  readonly property var today: Model.todaysDrinks(log.drinks, dayStart)
   readonly property int todayMg: Model.totalMg(today)
   readonly property int todayPercent: Math.round(todayMg / dailyLimitMg * 100)
   readonly property real level: todayMg / dailyLimitMg
   readonly property bool cupShowsBody: cupMode === "In your system"
   readonly property real cupLevel: cupShowsBody ? inBodyMg / dailyLimitMg : level
-  readonly property int cupPercent: Math.round(cupLevel * 100)
   readonly property bool overLimit: todayMg > dailyLimitMg
   readonly property var first: Model.firstDrink(today)
   readonly property var last: Model.lastDrink(log.drinks)
-  readonly property string lastKind: last ? String(last.kind) : String(log.lastKind || "espresso")
+  // "Again" means the last drink you logged (even back in time); when that
+  // kind no longer exists, the latest drink in the log, then espresso.
+  readonly property string lastKind: {
+    var candidates = [String(log.lastKind || ""), last ? String(last.kind) : "", "espresso"]
+    for (var i = 0; i < candidates.length; i++)
+      if (candidates[i] && Model.drink(candidates[i], drinksConfig).kind === candidates[i])
+        return candidates[i]
+    return "espresso"
+  }
   readonly property var lastPreset: Model.drink(lastKind, drinksConfig)
   readonly property int inBodyMg: Math.round(Model.inBody(log.drinks, now, halfLife))
   readonly property var cutoff: Model.cutoff(log.drinks, now, bedtime, halfLife,
@@ -119,8 +135,8 @@ Panel {
       return "Cut-off " + Model.formatTimeFrom(c.time, now, timeFmt) + " for another " + lastPreset.name
     if (c.status === "passed")
       return "Past cut-off for another " + lastPreset.name + " · decaf from here"
-    return "Over the bedtime limit · under " + bedtimeLimitMg + " mg by "
-      + Model.formatTimeFrom(c.time, now, timeFmt)
+    return "Over the bedtime limit · under " + bedtimeLimitMg + " mg "
+      + (c.time ? "by " + Model.formatTimeFrom(c.time, now, timeFmt) : "not within two days")
   }
   readonly property string firstLine: first
     ? "First caffeine today: " + Model.formatTime(Model.drinkTime(first), timeFmt)
@@ -136,7 +152,7 @@ Panel {
   readonly property color dim: Qt.darker(foreground, 1.4)
 
   // ---- week --------------------------------------------------------------
-  readonly property var week: Model.dayTotals(log.drinks, now, 7)
+  readonly property var week: Model.dayTotals(log.drinks, dayStart, 7)
   readonly property var weekTokens: week.map(function(d) { return Model.tokensForDay(tokens.hours, d.date) })
   readonly property int weekAvgMg: Math.round(Model.mean(week.map(function(d) { return d.mg })))
   readonly property real weekAvgDrinks: Model.mean(week.map(function(d) { return d.count }))
@@ -146,24 +162,23 @@ Panel {
   readonly property int weekMgTotal: week.reduce(function(a, d) { return a + d.mg }, 0)
   readonly property real mgSlope: Model.slope(week.map(function(d) { return d.mg }))
   readonly property real tokenSlope: Model.slope(weekTokens)
-  readonly property var activeHours: Model.activeHours(log.drinks, tokens.hours, now, 7, halfLife)
+  readonly property var activeHours: Model.activeHours(log.drinks, tokens.hours, hourStart, 7, halfLife)
   readonly property var buckets: Model.tokenBuckets(activeHours)
   readonly property var sweetSpot: Model.sweetSpot(buckets)
   readonly property real bucketMax: Math.max(1, Math.max.apply(null, buckets.map(function(b) { return b.perHour })))
   readonly property real hourR: Model.pearson(activeHours.map(function(p) { return p.mg }),
     activeHours.map(function(p) { return p.tokens }))
-  readonly property int sourceFiles: (Number(tokens.sources.claude) || 0) + (Number(tokens.sources.codex) || 0)
+  readonly property int sourceFiles: tokens.sources
+    ? (Number(tokens.sources.claude) || 0) + (Number(tokens.sources.codex) || 0) : 0
 
   // ---- lifecycle ---------------------------------------------------------
   function open() {
-    openedFromHotkey = false
     setCenterHoverRevealSuppressed(false)
     refresh()
     root.controller.show()
   }
 
   function openFromHotkey() {
-    openedFromHotkey = true
     refresh()
     root.controller.show()
     Qt.callLater(function() {
@@ -219,26 +234,30 @@ Panel {
     logFile.reload()
     drinksFile.reload()
     shellConfigFile.reload()
-    fetchTokens(false)
+    if (page === "week") fetchTokens(false)
   }
 
+  // The scan is cheap but not free; only the week page needs it, and a
+  // successful scan is good for two minutes.
   function fetchTokens(force) {
-    if (!force && Date.now() - tokensFetchedAt < 120000) return
+    if (!force && tokensState === "ok" && Date.now() - tokensFetchedAt < 120000) return
     if (tokensProcess.running) return
-    tokensFetchedAt = Date.now()
+    tokensState = "loading"
     tokensProcess.running = true
   }
 
   // ---- log ---------------------------------------------------------------
-  // Logs `kind` now, or at `at` when given, or at the time picked on the
-  // graph. Unknown kinds are refused rather than silently becoming espresso.
+  // Logs `kind` now, or at `at` when given. Only the drink grid passes the
+  // time picked on the graph; hotkeys and IPC always mean "now". Unknown
+  // kinds are refused rather than silently becoming espresso.
   function logDrink(kind, at) {
     var d = Model.drink(kind, drinksConfig)
     if (d.kind !== String(kind)) {
-      showFlash("No drink called " + kind)
+      lastError = "No drink called " + kind
+      showFlash(lastError)
       return false
     }
-    var when = at || pickTime || new Date()
+    var when = at || new Date()
     var backdated = Math.abs(when.getTime() - Date.now()) > 90000
     var next = Model.parseLog(Model.serializeLog(log))
     var entry = { t: when.toISOString(), kind: d.kind, name: d.name, mg: d.mg }
@@ -258,13 +277,14 @@ Panel {
   function logAt(kind, timeText) {
     var parsed = Model.parseBedtime(timeText)
     if (!parsed) {
-      showFlash("Time needs to look like " + bedtimeLabel)
+      lastError = "Time needs to look like " + bedtimeLabel
+      showFlash(lastError)
       return false
     }
     var reference = new Date()
     var when = new Date(reference.getFullYear(), reference.getMonth(), reference.getDate(),
       parsed.hours, parsed.minutes, 0, 0)
-    if (when.getTime() > reference.getTime()) when = new Date(when.getTime() - 24 * 3600000)
+    if (when.getTime() > reference.getTime()) when = Model.addDays(when, -1)
     return logDrink(kind, when)
   }
 
@@ -276,7 +296,7 @@ Panel {
     }
     if (!target) target = Model.lastDrink(log.drinks)
     if (!target) return
-    removeDrink(target)
+    if (!removeDrink(target)) return
     lastLogged = null
     showFlash("Removed " + target.name)
   }
@@ -289,12 +309,13 @@ Panel {
         break
       }
     }
-    commitLog(next)
+    return commitLog(next)
   }
 
   function commitLog(next) {
     if (!logLoaded) {
-      showFlash("Log not loaded yet · try again in a second")
+      lastError = "Log file not loaded or not readable · nothing written"
+      showFlash(lastError)
       logFile.reload()
       return false
     }
@@ -313,7 +334,8 @@ Panel {
   // ---- drinks: custom drinks and overrides --------------------------------
   function commitDrinks(next) {
     if (!drinksLoaded) {
-      showFlash("Drinks file not loaded yet · try again in a second")
+      lastError = "Drinks file not loaded or not readable · nothing written"
+      showFlash(lastError)
       drinksFile.reload()
       return false
     }
@@ -343,8 +365,9 @@ Panel {
   function saveEditor() {
     if (!editing) return
     var next = Model.cloneDrinksConfig(drinksConfig)
-    var mg = Math.max(0, Math.round(draftMg))
-    var name = draftName.trim() || "My drink"
+    var mg = Model.cleanMg(draftMg) || 0
+    var name = Model.cleanName(draftName, "My drink")
+    var message = ""
     if (editing.custom) {
       if (editing.isNew) {
         next.custom.push({ kind: Model.newCustomKind(), name: name, mg: mg, icon: draftIcon })
@@ -356,13 +379,14 @@ Panel {
           next.custom[i].icon = draftIcon
         }
       }
-      showFlash(name + " saved · " + mg + " mg")
+      message = name + " saved · " + mg + " mg"
     } else {
       if (mg === Model.preset(editing.kind).mg) delete next.overrides[editing.kind]
       else next.overrides[editing.kind] = mg
-      showFlash(Model.preset(editing.kind).name + " is now " + mg + " mg")
+      message = Model.preset(editing.kind).name + " is now " + mg + " mg"
     }
-    commitDrinks(next)
+    if (!commitDrinks(next)) return      // keep the draft and the page
+    showFlash(message)
     editing = null
     page = "main"
   }
@@ -376,7 +400,7 @@ Panel {
     if (!editing || !editing.custom || editing.isNew) return
     var next = Model.cloneDrinksConfig(drinksConfig)
     next.custom = next.custom.filter(function(c) { return c.kind !== editing.kind })
-    commitDrinks(next)
+    if (!commitDrinks(next)) return
     showFlash("Deleted " + draftName)
     editing = null
     page = "main"
@@ -385,14 +409,16 @@ Panel {
   function resetAllOverrides() {
     var next = Model.cloneDrinksConfig(drinksConfig)
     next.overrides = {}
-    commitDrinks(next)
-    showFlash("Every preset back to its default mg")
+    if (commitDrinks(next)) showFlash("Every preset back to its default mg")
   }
 
   // ---- settings persistence ---------------------------------------------
+  // The host reports "nothing changed" as false, so an unchanged value
+  // must not fall through to the CLI. Same-value writes are skipped here.
   function saveSetting(key, value) {
-    var next = {}
     var current = settings || {}
+    if (current.hasOwnProperty(key) && String(current[key]) === String(value)) return
+    var next = {}
     for (var k in current) if (k !== "id") next[k] = current[k]
     next[key] = value
     var ok = false
@@ -406,8 +432,14 @@ Panel {
     if (ok) settings = next
   }
 
+  // Pounds are stored as whole kilograms, and one pound is less than one
+  // kilogram, so a single step in the field must still move the stored
+  // value or the spinner would appear stuck.
   function saveWeight(shown) {
-    saveSetting("bodyWeightKg", imperial ? Model.lbToKg(shown) : shown)
+    if (!imperial) { saveSetting("bodyWeightKg", shown); return }
+    var kg = Model.lbToKg(shown)
+    if (kg === bodyWeightKg && shown !== weightShown) kg += shown > weightShown ? 1 : -1
+    saveSetting("bodyWeightKg", Math.max(1, kg))
   }
 
   function commitBedtime() {
@@ -450,11 +482,20 @@ Panel {
     command: ["python3", root.pluginDir + "/tokens.py", "8"]
     stdout: StdioCollector {
       onStreamFinished: {
-        try {
-          var parsed = JSON.parse(text)
-          if (parsed && parsed.hours) root.tokens = parsed
-        } catch (e) {}
+        var parsed = null
+        try { parsed = JSON.parse(text) } catch (e) {}
+        if (parsed && parsed.hours && typeof parsed.hours === "object") {
+          if (!parsed.sources) parsed.sources = {}
+          root.tokens = parsed
+          root.tokensFetchedAt = Date.now()
+          root.tokensState = "ok"
+        } else {
+          root.tokensState = "failed"
+        }
       }
+    }
+    onExited: function(code) {
+      if (code !== 0) root.tokensState = "failed"
     }
   }
 
@@ -466,17 +507,36 @@ Panel {
     atomicWrites: true
     onFileChanged: reload()
     onLoaded: {
-      root.log = Model.pruneLog(Model.parseLog(text()), new Date())
-      root.logLoaded = true
-    }
-    // A missing file on first load is a fresh install. Any other failure,
-    // or a transient miss during our own atomic rename, keeps what is in
-    // memory and keeps writes blocked.
-    onLoadFailed: function(error) {
-      if (error === FileViewError.FileNotFound && !root.logLoaded) {
-        root.log = Model.emptyLog()
+      var parsed = Model.parseLogOrNull(text())
+      if (parsed) {
+        root.log = Model.pruneLog(parsed, new Date())
         root.logLoaded = true
+      } else {
+        // Not something we wrote: keep the display, refuse to write over it.
+        root.logLoaded = false
+        root.lastError = "log.json is not a log I understand · leaving it alone"
+        root.showFlash(root.lastError)
       }
+    }
+    // A missing file on first load is a fresh install. A missing file later
+    // (deleted by hand, or a transient miss during our own atomic rename)
+    // keeps memory and stays writable. Any other failure blocks writes.
+    onLoadFailed: function(error) {
+      if (error === FileViewError.FileNotFound) {
+        if (!root.logLoaded) {
+          root.log = Model.emptyLog()
+          root.logLoaded = true
+        }
+        return
+      }
+      root.logLoaded = false
+      root.lastError = "Cannot read log.json (" + FileViewError.toString(error) + ")"
+      root.showFlash(root.lastError)
+    }
+    onSaveFailed: function(error) {
+      root.lastError = "Could not write log.json (" + FileViewError.toString(error) + ")"
+      root.showFlash(root.lastError)
+      console.warn("omacaffeine: " + root.lastError)
     }
   }
 
@@ -488,14 +548,32 @@ Panel {
     atomicWrites: true
     onFileChanged: reload()
     onLoaded: {
-      root.drinksConfig = Model.parseDrinksConfig(text())
-      root.drinksLoaded = true
+      var parsed = Model.parseDrinksConfigOrNull(text())
+      if (parsed) {
+        root.drinksConfig = parsed
+        root.drinksLoaded = true
+      } else {
+        root.drinksLoaded = false
+        root.lastError = "drinks.json is not a drinks file I understand · leaving it alone"
+        root.showFlash(root.lastError)
+      }
     }
     onLoadFailed: function(error) {
-      if (error === FileViewError.FileNotFound && !root.drinksLoaded) {
-        root.drinksConfig = Model.emptyDrinksConfig()
-        root.drinksLoaded = true
+      if (error === FileViewError.FileNotFound) {
+        if (!root.drinksLoaded) {
+          root.drinksConfig = Model.emptyDrinksConfig()
+          root.drinksLoaded = true
+        }
+        return
       }
+      root.drinksLoaded = false
+      root.lastError = "Cannot read drinks.json (" + FileViewError.toString(error) + ")"
+      root.showFlash(root.lastError)
+    }
+    onSaveFailed: function(error) {
+      root.lastError = "Could not write drinks.json (" + FileViewError.toString(error) + ")"
+      root.showFlash(root.lastError)
+      console.warn("omacaffeine: " + root.lastError)
     }
   }
 
@@ -531,14 +609,13 @@ Panel {
     function hide(): void { root.close() }
     function toggle(): void { root.toggle() }
     function log(kind: string): string {
-      return root.logDrink(kind) ? root.todayMg + " mg today" : "unknown drink: " + kind
+      return root.logDrink(kind) ? root.todayMg + " mg today" : "error: " + root.lastError
     }
     function logAt(kind: string, time: string): string {
-      return root.logAt(kind, time) ? root.todayMg + " mg today" : "could not log " + kind + " at " + time
+      return root.logAt(kind, time) ? root.todayMg + " mg today" : "error: " + root.lastError
     }
     function logLast(): string {
-      root.logLast()
-      return root.todayMg + " mg today"
+      return root.logDrink(root.lastKind) ? root.todayMg + " mg today" : "error: " + root.lastError
     }
     function undo(): void { root.undoLast() }
     function settings(): void { root.openFromHotkey(); root.showPage("settings") }
@@ -573,7 +650,8 @@ Panel {
     PanelKeyCatcher {
       id: keyCatcher
       anchors.fill: parent
-      blocked: bedtimeField.activeFocus || nameField.activeFocus
+      blocked: bedtimeField.activeFocus || nameField.activeFocus || weightField.field.activeFocus
+        || dailyField.field.activeFocus || bedLimitField.field.activeFocus || mgField.field.activeFocus
       onReturnRequested: {
         if (root.page === "main") root.logLast()
         else if (root.page === "drink") root.saveEditor()
@@ -600,42 +678,63 @@ Panel {
             width: parent.width
             height: Style.space(30)
 
-            Row {
+            PanelActionButton {
+              id: backButton
+              visible: root.page !== "main"
               anchors.left: parent.left
-              anchors.right: headerButtons.left
+              anchors.verticalCenter: parent.verticalCenter
+              iconText: "󰁍"
+              tooltipText: "Back (Esc)"
+              foreground: root.foreground
+              fontFamily: root.fontFamily
+              onClicked: root.goBack()
+            }
+            Text {
+              id: headerIcon
+              visible: root.page === "main"
+              anchors.left: parent.left
+              anchors.verticalCenter: parent.verticalCenter
+              text: "󰅶"
+              color: root.accent
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.iconLarge
+            }
+            Text {
+              id: headerTitle
+              anchors.left: root.page === "main" ? headerIcon.right : backButton.right
+              anchors.leftMargin: Style.space(8)
+              anchors.right: headerFlash.visible ? headerFlash.left : headerButtons.left
               anchors.rightMargin: Style.space(8)
               anchors.verticalCenter: parent.verticalCenter
-              spacing: Style.space(8)
-
-              PanelActionButton {
-                visible: root.page !== "main"
-                anchors.verticalCenter: parent.verticalCenter
-                iconText: "󰁍"
-                tooltipText: "Back (Esc)"
-                foreground: root.foreground
-                fontFamily: root.fontFamily
-                onClicked: root.goBack()
-              }
-              Text {
-                visible: root.page === "main"
-                anchors.verticalCenter: parent.verticalCenter
-                text: "󰅶"
-                color: root.accent
-                font.family: root.fontFamily
-                font.pixelSize: Style.font.iconLarge
-              }
-              Text {
-                anchors.verticalCenter: parent.verticalCenter
-                text: root.page === "main" ? "OmaCaffeine"
-                  : (root.page === "settings" ? "Settings"
-                  : (root.page === "week" ? Model.weekHeading(root.seed)
-                  : (root.editing && root.editing.isNew ? "New drink" : "Edit " + root.draftName)))
-                color: root.foreground
-                font.family: root.fontFamily
-                font.pixelSize: Style.font.title
-                font.bold: true
-                elide: Text.ElideRight
-              }
+              text: root.page === "main" ? "OmaCaffeine"
+                : (root.page === "settings" ? "Settings"
+                : (root.page === "week" ? Model.weekHeading(root.seed)
+                : (root.editing && root.editing.isNew ? "New drink" : "Edit " + root.draftName)))
+              textFormat: Text.PlainText
+              color: root.foreground
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.title
+              font.bold: true
+              elide: Text.ElideRight
+            }
+            // Off the main page the cup is not there to carry the flash, so
+            // it fades in next to the buttons instead.
+            Text {
+              id: headerFlash
+              visible: root.page !== "main"
+              anchors.right: headerButtons.left
+              anchors.rightMargin: Style.space(10)
+              anchors.verticalCenter: parent.verticalCenter
+              width: Math.min(implicitWidth, Style.space(260))
+              text: root.flash
+              textFormat: Text.PlainText
+              color: root.accent
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+              font.bold: true
+              elide: Text.ElideLeft
+              opacity: root.flashVisible ? 1 : 0
+              Behavior on opacity { NumberAnimation { duration: 450; easing.type: Easing.InOutSine } }
             }
 
             Row {
@@ -693,6 +792,7 @@ Panel {
               anchors.left: parent.left
               anchors.verticalCenter: parent.verticalCenter
               level: root.cupLevel
+              active: root.opened
               foreground: root.foreground
               urgent: root.urgent
               fontFamily: root.fontFamily
@@ -711,6 +811,7 @@ Panel {
               y: 0
               width: Math.min(implicitWidth, maxWidth)
               text: root.flash
+              textFormat: Text.PlainText
               color: root.accent
               font.family: root.fontFamily
               font.pixelSize: Style.font.caption
@@ -731,6 +832,7 @@ Panel {
 
               ScrollingText {
                 width: parent.width
+                active: root.opened
                 text: root.firstLine
                 color: root.first ? root.foreground : root.accent
                 fontFamily: root.fontFamily
@@ -751,7 +853,9 @@ Panel {
                 StatRow {
                   label: "In your system"
                   value: root.inBodyMg > 0
-                    ? root.inBodyMg + " mg · gone by ~" + Model.formatTimeFrom(root.caffeineFreeAt, root.now, root.timeFmt)
+                    ? root.inBodyMg + " mg · " + (root.caffeineFreeAt
+                      ? "gone by ~" + Model.formatTimeFrom(root.caffeineFreeAt, root.now, root.timeFmt)
+                      : "not gone for days")
                     : "0 mg · clean slate"
                 }
                 StatRow {
@@ -770,8 +874,7 @@ Panel {
                   id: cutoffIcon
                   anchors.left: parent.left
                   anchors.verticalCenter: parent.verticalCenter
-                  text: root.cutoff.status === "clear" ? "󰒲"
-                    : (root.cutoff.status === "until" ? "󰔛" : "󰅜")
+                  text: Model.cutoffIcon(root.cutoff.status)
                   color: root.cutoffOk ? root.accent : root.urgent
                   font.family: root.fontFamily
                   font.pixelSize: Style.font.icon
@@ -781,6 +884,7 @@ Panel {
                   anchors.leftMargin: Style.space(8)
                   anchors.right: parent.right
                   anchors.verticalCenter: parent.verticalCenter
+                  active: root.opened
                   text: root.statusLine
                   color: root.cutoffOk ? root.accent : root.urgent
                   fontFamily: root.fontFamily
@@ -854,6 +958,7 @@ Panel {
                     anchors.horizontalCenter: parent.horizontalCenter
                     width: Math.min(implicitWidth, drinkGrid.cellWidth - Style.space(8))
                     text: placeholder ? "Create my own" : modelData.name
+                    textFormat: Text.PlainText
                     color: placeholder ? root.dim : root.foreground
                     font.family: root.fontFamily
                     font.pixelSize: Style.font.caption
@@ -879,7 +984,7 @@ Panel {
                   onClicked: function(mouse) {
                     if (placeholder) root.openNewDrink()
                     else if (mouse.button === Qt.RightButton) root.openEditor(modelData.kind)
-                    else root.logDrink(modelData.kind)
+                    else root.logDrink(modelData.kind, root.pickTime)
                   }
                 }
 
@@ -968,7 +1073,10 @@ Panel {
                   height: logScroll.rowHeight
 
                   Row {
+                    id: logRow
                     anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.rightMargin: Style.space(36)
                     anchors.verticalCenter: parent.verticalCenter
                     spacing: Style.space(10)
 
@@ -988,7 +1096,10 @@ Panel {
                       anchors.verticalCenter: parent.verticalCenter
                     }
                     Text {
+                      width: Math.min(implicitWidth, logRow.width - Style.space(150))
                       text: modelData.name
+                      textFormat: Text.PlainText
+                      elide: Text.ElideRight
                       color: root.foreground
                       font.family: root.fontFamily
                       font.pixelSize: Style.font.bodySmall
@@ -1051,6 +1162,7 @@ Panel {
                     anchors.horizontalCenter: parent.horizontalCenter
                     width: Math.min(implicitWidth, Style.space(96))
                     text: root.draftName.trim() || "My drink"
+                    textFormat: Text.PlainText
                     color: root.foreground
                     font.family: root.fontFamily
                     font.pixelSize: Style.font.caption
@@ -1080,6 +1192,7 @@ Panel {
                   id: nameField
                   width: Style.space(180)
                   text: root.draftName
+                  maximumLength: Model.MAX_NAME
                   placeholderText: "Batch brew"
                   foreground: root.foreground
                   accent: root.accent
@@ -1090,10 +1203,11 @@ Panel {
               }
 
               NumberField {
+                id: mgField
                 label: "Caffeine (mg)"
                 value: root.draftMg
                 from: 0
-                to: 1000
+                to: Model.MAX_MG
                 stepSize: 1
                 foreground: root.foreground
                 accent: root.accent
@@ -1313,11 +1427,14 @@ Panel {
               }
               StatRow {
                 label: "Tokens"
-                value: root.weekTokenTotal > 0
-                  ? Model.formatTokens(root.weekTokenTotal) + " output tokens · "
-                    + Model.formatTokens(root.weekTokenTotal / 7) + "/day"
-                    + (root.weekMgTotal > 0 ? " · " + Model.formatTokens(root.weekTokenTotal / root.weekMgTotal) + " per mg" : "")
-                  : "No agent transcripts found this week"
+                value: root.tokensState === "failed"
+                  ? "tokens.py failed · is python3 installed?"
+                  : (root.tokensState === "loading" && root.weekTokenTotal === 0 ? "Scanning transcripts…"
+                  : (root.weekTokenTotal > 0
+                    ? Model.formatTokens(root.weekTokenTotal) + " output tokens · "
+                      + Model.formatTokens(root.weekTokenTotal / 7) + "/day"
+                      + (root.weekMgTotal > 0 ? " · " + Model.formatTokens(root.weekTokenTotal / root.weekMgTotal) + " per mg" : "")
+                    : "No agent transcripts found this week"))
               }
               StatRow {
                 label: "Trend"
@@ -1392,6 +1509,7 @@ Panel {
 
               ScrollingText {
                 width: parent.width
+                active: root.opened
                 text: root.sweetSpot
                   ? "Sweet spot: " + root.sweetSpot.label + " in your system · "
                     + Model.formatTokens(root.sweetSpot.perHour) + " tokens/hour"
@@ -1403,6 +1521,7 @@ Panel {
               }
               ScrollingText {
                 width: parent.width
+                active: root.opened
                 text: Model.describeCorrelation(root.hourR, root.activeHours.length)
                 color: root.dim
                 fontFamily: root.fontFamily
@@ -1440,6 +1559,7 @@ Panel {
               spacing: Style.space(16)
 
               NumberField {
+                id: weightField
                 label: "Body weight (" + root.weightUnit + ")"
                 value: root.weightShown
                 from: root.imperial ? 66 : 30
@@ -1527,6 +1647,7 @@ Panel {
                 }
               }
               NumberField {
+                id: dailyField
                 label: "Daily limit (mg)"
                 value: root.dailyLimitMg
                 from: 50
@@ -1538,9 +1659,10 @@ Panel {
                 onModified: function(v) { root.saveSetting("dailyLimitMg", v) }
               }
               NumberField {
+                id: bedLimitField
                 label: "At bedtime (mg)"
                 value: root.bedtimeLimitMg
-                from: 0
+                from: 5
                 to: 200
                 stepSize: 5
                 foreground: root.foreground
@@ -1637,7 +1759,7 @@ Panel {
               }
               ButtonGroup {
                 options: ["Icon", "Milligrams", "Percent"]
-                value: String(root.setting("barDisplay", "Icon"))
+                value: root.barDisplay
                 foreground: root.foreground
                 accent: root.accent
                 fontFamily: root.fontFamily
@@ -1709,6 +1831,7 @@ Panel {
       anchors.left: labelText.right
       anchors.right: parent.right
       anchors.top: parent.top
+      active: root.opened
       text: value
       color: valueColor
       fontFamily: root.fontFamily

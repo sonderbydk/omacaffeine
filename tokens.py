@@ -4,12 +4,13 @@
 Reads Claude Code transcripts (~/.claude/projects/**/*.jsonl) and Codex
 session rollouts (~/.codex/sessions/**/*.jsonl) and prints one JSON object:
 
-  {"hours": {"2026-09-13T09": 12345, ...}, "sources": {"claude": 88, "codex": 3}}
+  {"hours": {"2026-09-13T09": 12345, ...},
+   "sources": {"claude": 88, "codex": 3}, "skipped": 0}
 
 Keys are local time, bucketed by hour; values are output tokens (thinking
-included). `sources` counts the files that contributed. Only files touched
-within the requested number of days are opened, so a call takes well under a
-second even with a large history.
+included). `sources` counts the files that contributed at least one token
+inside the window; `skipped` counts files that could not be read. Only
+files touched within the requested number of days are opened.
 
 Usage: tokens.py [days]      (default 8)
 """
@@ -19,27 +20,41 @@ import sys
 import time
 from datetime import datetime, timezone
 
-DAYS = int(sys.argv[1]) if len(sys.argv) > 1 else 8
+DAYS = int(sys.argv[1]) if len(sys.argv) > 1 and sys.argv[1].isdigit() else 8
 CUTOFF = time.time() - DAYS * 86400
 HOME = os.path.expanduser("~")
 
 hours = {}
 sources = {"claude": 0, "codex": 0}
+skipped = 0
+# Claude message ids are global: a resumed or forked session can carry the
+# same message in two files, and every content block repeats the usage.
+seen_messages = set()
+
+
+def as_int(value):
+    try:
+        n = int(value)
+    except (TypeError, ValueError):
+        return None
+    return n if n >= 0 else None
 
 
 def bucket(ts, tokens):
-    if tokens <= 0:
-        return
+    """Add tokens to the local hour of `ts`; True when they landed."""
+    if not tokens or tokens <= 0:
+        return False
     try:
-        when = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+        when = datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
     except ValueError:
-        return
+        return False
     if when.tzinfo is None:
         when = when.replace(tzinfo=timezone.utc)
     if when.timestamp() < CUTOFF:
-        return
+        return False
     key = when.astimezone().strftime("%Y-%m-%dT%H")
     hours[key] = hours.get(key, 0) + tokens
+    return True
 
 
 def recent_files(root):
@@ -56,9 +71,6 @@ def recent_files(root):
 
 
 def claude(path):
-    # One assistant message is written once per content block, each line
-    # repeating the same usage, so count each message id once.
-    seen = set()
     hit = False
     with open(path, encoding="utf-8", errors="replace") as fh:
         for line in fh:
@@ -68,24 +80,32 @@ def claude(path):
                 d = json.loads(line)
             except ValueError:
                 continue
-            if d.get("type") != "assistant":
+            if not isinstance(d, dict) or d.get("type") != "assistant":
                 continue
-            m = d.get("message") or {}
-            usage = m.get("usage") or {}
-            mid = m.get("id") or d.get("uuid")
-            if mid in seen:
+            m = d.get("message")
+            if not isinstance(m, dict):
                 continue
-            seen.add(mid)
-            bucket(str(d.get("timestamp", "")), int(usage.get("output_tokens") or 0))
-            hit = True
-    if hit:
-        sources["claude"] += 1
+            usage = m.get("usage")
+            if not isinstance(usage, dict):
+                continue
+            tokens = as_int(usage.get("output_tokens"))
+            if tokens is None:
+                continue
+            mid = m.get("id")
+            if mid:
+                if mid in seen_messages:
+                    continue
+                seen_messages.add(mid)
+            hit = bucket(d.get("timestamp"), tokens) or hit
+    return hit
 
 
 def codex(path):
     # token_count events carry a cumulative total; the difference between
-    # consecutive events is that turn's output, which survives repeats.
-    prev = 0
+    # consecutive valid events is that turn's output. Events without a
+    # usable total are ignored without moving the baseline; a total that
+    # goes down is a fresh counter.
+    prev = None
     hit = False
     with open(path, encoding="utf-8", errors="replace") as fh:
         for line in fh:
@@ -95,22 +115,34 @@ def codex(path):
                 d = json.loads(line)
             except ValueError:
                 continue
-            payload = d.get("payload") or {}
-            if payload.get("type") != "token_count":
+            if not isinstance(d, dict):
                 continue
-            info = payload.get("info") or {}
-            total = int(((info.get("total_token_usage") or {}).get("output_tokens")) or 0)
-            delta = total - prev if total >= prev else total
+            payload = d.get("payload")
+            if not isinstance(payload, dict) or payload.get("type") != "token_count":
+                continue
+            info = payload.get("info")
+            usage = info.get("total_token_usage") if isinstance(info, dict) else None
+            total = as_int(usage.get("output_tokens")) if isinstance(usage, dict) else None
+            if total is None:
+                continue
+            delta = total if prev is None or total < prev else total - prev
             prev = total
-            bucket(str(d.get("timestamp", "")), delta)
-            hit = True
-    if hit:
-        sources["codex"] += 1
+            hit = bucket(d.get("timestamp"), delta) or hit
+    return hit
 
 
-for path in recent_files(os.path.join(HOME, ".claude", "projects")):
-    claude(path)
-for path in recent_files(os.path.join(HOME, ".codex", "sessions")):
-    codex(path)
+def scan(root, reader, name):
+    global skipped
+    for path in recent_files(root):
+        try:
+            if reader(path):
+                sources[name] += 1
+        except (OSError, UnicodeError):
+            skipped += 1
 
-json.dump({"hours": hours, "sources": sources}, sys.stdout, separators=(",", ":"))
+
+scan(os.path.join(HOME, ".claude", "projects"), claude, "claude")
+scan(os.path.join(HOME, ".codex", "sessions"), codex, "codex")
+
+json.dump({"hours": hours, "sources": sources, "skipped": skipped}, sys.stdout,
+          separators=(",", ":"))

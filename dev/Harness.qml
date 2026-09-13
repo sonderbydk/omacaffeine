@@ -4,8 +4,8 @@ import qs.Commons
 import "Model.js" as Model
 
 // Component gallery for dev/harness.sh: cups at three levels, a stat block,
-// every drink icon and the timeline. Adds a drink after 1.5 s and removes it
-// after 4 s so the graph fades and the cup animation can be watched.
+// every drink icon and the timeline. Adds a drink after 2 s and removes it
+// after 4 s so the graph fades and the cup pour can be watched.
 ShellRoot {
   FloatingWindow {
     id: win
@@ -16,19 +16,21 @@ ShellRoot {
     visible: true
 
     property real lvl: 0.3
+    property date now: new Date()
     property var drinks: [{ t: new Date(new Date().getTime() - 3 * 3600000).toISOString(),
       kind: "latte", name: "Latte", mg: 126 }]
 
     Timer {
       interval: 2000; running: true
       onTriggered: {
-        win.drinks = win.drinks.concat([{ t: new Date().toISOString(), kind: "monster", name: "Monster", mg: 160 }])
+        win.now = new Date()
+        win.drinks = win.drinks.concat([{ t: win.now.toISOString(), kind: "monster", name: "Monster", mg: 160 }])
         win.lvl = 0.9
       }
     }
     Timer {
       interval: 4000; running: true
-      onTriggered: { win.drinks = win.drinks.slice(0, 1); win.lvl = 0.3 }
+      onTriggered: { win.now = new Date(); win.drinks = win.drinks.slice(0, 1); win.lvl = 0.3 }
     }
 
     Column {
@@ -100,7 +102,7 @@ ShellRoot {
         width: parent.width
         height: 120
         drinks: win.drinks
-        now: new Date()
+        now: win.now
         bedtime: Model.nextBedtime(new Date(), "23:00")
         halfLife: 5
         bedtimeLimit: 100

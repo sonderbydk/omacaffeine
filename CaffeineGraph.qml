@@ -49,14 +49,15 @@ Item {
   readonly property real axisBottom: Style.space(22)
   readonly property color dim: Qt.darker(foreground, 1.4)
 
-  // Window: an hour before the first drink today (or 07:00), through two
-  // hours past bedtime. Always at least twelve hours wide.
+  // Window: from 06:00 (earlier if a drink was earlier) through two hours
+  // past bedtime, always at least twelve hours wide. Starting at 06:00 keeps
+  // the whole morning clickable for backdating.
   readonly property var window: {
     var start = Model.startOfDay(now)
     var today = Model.todaysDrinks(drinks, now)
-    var from = today.length
-      ? new Date(Model.drinkTime(today[0]).getTime() - 3600000)
-      : new Date(start.getTime() + 7 * 3600000)
+    var from = new Date(start.getFullYear(), start.getMonth(), start.getDate(), 6)
+    if (today.length)
+      from = new Date(Math.min(from.getTime(), Model.drinkTime(today[0]).getTime() - 3600000))
     from = new Date(Math.min(from.getTime(), now.getTime()))
     from.setMinutes(0, 0, 0)
     var to = new Date(Math.max(bedtime.getTime() + 2 * 3600000, now.getTime() + 3 * 3600000))
@@ -66,8 +67,10 @@ Item {
   }
 
   // The log is replaced twice per change (memory, then the file watcher), so
-  // only a real difference in drinks starts the fade.
-  property string drinkKey: ""
+  // only a real difference in drinks starts the fade. When the change also
+  // moves the window, old and new columns are different times, so no fade.
+  property string drinkKey: "unset"
+  property string windowKey: ""
   function keyFor(list) {
     var parts = []
     for (var i = 0; i < (list || []).length; i++) parts.push(list[i].t + "|" + list[i].mg)
@@ -76,15 +79,35 @@ Item {
   onDrinksChanged: {
     var key = keyFor(drinks)
     if (key === drinkKey) return
-    var firstLoad = drinkKey === ""
+    var firstLoad = drinkKey === "unset"
     drinkKey = key
-    if (firstLoad || !lastLevels) {
+    var newWindowKey = window.from.getTime() + "-" + window.to.getTime()
+    var moved = newWindowKey !== windowKey
+    windowKey = newWindowKey
+    sampleKey = ""
+    if (firstLoad || moved || !lastLevels) {
       canvas.requestPaint()
       return
     }
     previousLevels = lastLevels
     reveal = 0
     revealAnimation.restart()
+  }
+
+  // Sampling the model per column is the expensive part of a repaint, and
+  // hovering repaints often; cache the samples until something they depend
+  // on changes.
+  property string sampleKey: ""
+  property var sampleLevels: []
+  function samples(from, span, columns, stepMs) {
+    var key = drinkKey + "|" + from + "|" + span + "|" + columns + "|" + halfLife
+    if (key === sampleKey) return sampleLevels
+    var levels = []
+    for (var c = 0; c < columns; c++)
+      levels.push(Model.inBody(drinks, new Date(from + (c + 0.5) * stepMs), halfLife))
+    sampleKey = key
+    sampleLevels = levels
+    return levels
   }
   onRevealChanged: canvas.requestPaint()
 
@@ -103,6 +126,9 @@ Item {
   onBedtimeLimitChanged: canvas.requestPaint()
   onForegroundChanged: canvas.requestPaint()
   onAccentChanged: canvas.requestPaint()
+  onUrgentChanged: canvas.requestPaint()
+  onFontFamilyChanged: canvas.requestPaint()
+  onTimeFormatChanged: canvas.requestPaint()
   onWidthChanged: canvas.requestPaint()
   onHeightChanged: canvas.requestPaint()
   onVisibleChanged: if (visible) canvas.requestPaint()
@@ -143,15 +169,10 @@ Item {
       var rows = Math.max(1, Math.floor(plotH / pitch))
       var stepMs = span / columns
 
-      // Sample the model once per column.
-      var levels = []
+      // One sample per column, cached across hover repaints.
+      var levels = root.samples(from, span, columns, stepMs)
       var peak = root.bedtimeLimit * 1.4
-      for (var c = 0; c < columns; c++) {
-        var t = new Date(from + (c + 0.5) * stepMs)
-        var mg = Model.inBody(root.drinks, t, root.halfLife)
-        levels.push(mg)
-        if (mg > peak) peak = mg
-      }
+      for (var c = 0; c < columns; c++) if (levels[c] > peak) peak = levels[c]
       var scaleMax = Math.max(100, Math.ceil(peak / 50) * 50)
 
       var fg = root.foreground, ac = root.accent, ur = root.urgent

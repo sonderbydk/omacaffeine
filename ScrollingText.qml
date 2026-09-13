@@ -11,6 +11,7 @@ Item {
   property string fontFamily: Style.font.family
   property real pixelSize: Style.font.bodySmall
   property bool bold: false
+  property bool active: true          // owner's on-screen state; stops the glide
   property int pauseMs: 1400
   property real pixelsPerSecond: 28
 
@@ -50,7 +51,7 @@ Item {
 
   SequentialAnimation {
     id: glide
-    running: root.overflowing && root.visible
+    running: root.overflowing && root.visible && root.active
     loops: Animation.Infinite
     PauseAnimation { duration: root.pauseMs }
     NumberAnimation {

@@ -20,8 +20,10 @@ Item {
   property string sublabel: ""
   // Off for the small week cups: the steam stands still and no timer runs.
   property bool animated: true
+  // The owner's "is on screen" signal: a hidden popup keeps Item.visible
+  // true, so the panel passes its opened state here to stop the ticking.
+  property bool active: true
 
-  readonly property real clampedLevel: Math.max(0, Math.min(1, level))
   readonly property bool overLimit: level > 1
   readonly property bool empty: shownLevel <= 0.005
   readonly property bool steaming: !empty
@@ -57,13 +59,13 @@ Item {
   property real pour: 0
 
   Behavior on shownValue {
-    enabled: root.animate && root.animated
+    enabled: root.animate && root.animated && root.active
     NumberAnimation { duration: 1100; easing.type: Easing.OutCubic }
   }
   Component.onCompleted: Qt.callLater(function() { root.animate = true })
 
   onLevelChanged: {
-    if (animate && animated && Math.abs(level - lastLevel) > 0.002) {
+    if (animate && animated && active && Math.abs(level - lastLevel) > 0.002) {
       splashAnimation.restart()
       if (level > lastLevel) pourAnimation.restart()
     }
@@ -94,7 +96,7 @@ Item {
   // less than the easing between frames.
   Timer {
     interval: 33
-    running: root.visible && root.steaming && root.animated
+    running: root.visible && root.active && root.steaming && root.animated
     repeat: true
     onTriggered: {
       root.phase = (root.phase + (root.overLimit ? 0.13 : 0.035)) % (Math.PI * 200)

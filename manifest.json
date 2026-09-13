@@ -59,7 +59,7 @@
         "type": "string",
         "label": "Optimal bedtime",
         "defaultValue": "23:00",
-        "description": "Stored as 24-hour HH:MM; the panel shows and accepts your locale's format."
+        "description": "Stored as 24-hour HH:MM; the panel shows and accepts the Omarchy clock widget's format (locale format when no clock is configured)."
       },
       {
         "key": "dailyLimitMg",
@@ -75,7 +75,7 @@
         "key": "bedtimeLimitMg",
         "type": "integer",
         "label": "Caffeine left at bedtime (mg)",
-        "min": 0,
+        "min": 5,
         "max": 200,
         "step": 5,
         "defaultValue": 100,
