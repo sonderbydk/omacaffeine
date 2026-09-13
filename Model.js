@@ -1,34 +1,48 @@
 .pragma library
 
 // OmaCaffeine model: presets, the one-compartment half-life model, daily
-// totals and the bedtime cut-off. Pure functions so they can be unit tested
-// and so the QML stays about layout.
+// totals, the bedtime cut-off and locale-aware formatting. Pure functions so
+// they can be unit tested and so the QML stays about layout.
 
+// Caffeine per serving. Coffee numbers are typical café servings; a shot is
+// about 63 mg, so double-shot drinks land around 125-130 mg.
 var PRESETS = [
-  { kind: "espresso",  name: "Espresso",  mg: 63,  serving: "1 shot · 30 ml" },
-  { kind: "coffee",    name: "Coffee",    mg: 95,  serving: "1 cup · 250 ml" },
-  { kind: "black-tea", name: "Black Tea", mg: 47,  serving: "1 cup · 250 ml" },
-  { kind: "green-tea", name: "Green Tea", mg: 30,  serving: "1 cup · 250 ml" },
-  { kind: "matcha",    name: "Matcha",    mg: 70,  serving: "2 g · 1 bowl" },
-  { kind: "cola",      name: "Cola",      mg: 32,  serving: "1 can · 330 ml" },
-  { kind: "red-bull",  name: "Red Bull",  mg: 80,  serving: "1 can · 250 ml" },
-  { kind: "monster",   name: "Monster",   mg: 160, serving: "1 can · 500 ml" }
+  { kind: "espresso",   name: "Espresso",   mg: 63,  serving: "1 shot · 30 ml" },
+  { kind: "doppio",     name: "Doppio",     mg: 126, serving: "2 shots · 60 ml" },
+  { kind: "americano",  name: "Americano",  mg: 77,  serving: "1 shot + hot water" },
+  { kind: "cappuccino", name: "Cappuccino", mg: 63,  serving: "1 shot + foamed milk" },
+  { kind: "latte",      name: "Latte",      mg: 126, serving: "2 shots + steamed milk" },
+  { kind: "flat-white", name: "Flat White", mg: 130, serving: "2 ristretto + milk" },
+  { kind: "coffee",     name: "Filter",     mg: 95,  serving: "Filter coffee · 250 ml" },
+  { kind: "cold-brew",  name: "Cold Brew",  mg: 200, serving: "1 glass · 350 ml" },
+  { kind: "decaf",      name: "Decaf",      mg: 3,   serving: "Decaf coffee · 250 ml" },
+  { kind: "black-tea",  name: "Black Tea",  mg: 47,  serving: "1 cup · 250 ml" },
+  { kind: "green-tea",  name: "Green Tea",  mg: 30,  serving: "1 cup · 250 ml" },
+  { kind: "matcha",     name: "Matcha",     mg: 70,  serving: "2 g · 1 bowl" },
+  { kind: "cola",       name: "Cola",       mg: 32,  serving: "1 can · 330 ml" },
+  { kind: "red-bull",   name: "Red Bull",   mg: 80,  serving: "1 can · 250 ml" },
+  { kind: "monster",    name: "Monster",    mg: 160, serving: "1 can · 500 ml" }
 ]
 
 var ACTIVITIES = ["Sitting", "Standing", "Moving around"]
 
-// Caffeine half-life in adults is usually quoted as 3 to 7 hours. Physical
-// activity nudges clearance up a little, so a desk day sits at the slow end.
-var HALF_LIFE_HOURS = { "Sitting": 5.5, "Standing": 5.0, "Moving around": 4.5 }
+// Caffeine half-life in healthy adults averages about 5 hours (range roughly
+// 3 to 7). Physical activity nudges clearance up a little, so a desk day
+// sits at the slow end. These are assumptions, not measurements.
+var HALF_LIFE_HOURS = { "Sitting": 5.0, "Standing": 4.75, "Moving around": 4.5 }
 
-// EFSA guidance: 400 mg/day (about 5.7 mg/kg) and 200 mg (3 mg/kg) per dose
-// carry no safety concern for healthy adults.
+// EFSA (2015): 400 mg/day (about 5.7 mg/kg) and 200 mg (3 mg/kg) per single
+// dose carry no safety concern for healthy adults; single doses of 100 mg
+// close to bedtime may affect sleep in some people. That is where the
+// default bedtime limit of 100 mg comes from.
 var MG_PER_KG_DAY = 5.7
 var MG_PER_KG_DOSE = 3
 var DAILY_CAP = 400
+var DEFAULT_BEDTIME_LIMIT = 100
 
 var QUOTES = [
   "Good code is written on caffeine.",
+  "caffeine × tokens = production",
   "while (!asleep) { coffee++; }",
   "sudo brew install focus",
   "Half-life: about five hours. Uptime: as long as the pot lasts.",
@@ -41,7 +55,25 @@ var QUOTES = [
   "One does not simply ship before the second cup.",
   "Idle CPU. Idle developer. Both need a cup.",
   "Stack overflow? Try a cup underflow first.",
-  "Ctrl+C, Ctrl+V, ☕, repeat."
+  "Ctrl+C, Ctrl+V, ☕, repeat.",
+  "Fable writes the code. Espresso writes the prompt.",
+  "Astra plans the sprint. Caffeine runs it.",
+  "Context window: 1M tokens. Attention span: one espresso.",
+  "Every model has a temperature. Mine is 93 °C.",
+  "Prompt engineering starts with grinding the beans.",
+  "Let's cook. Preheat the developer to one flat white.",
+  "Creativity is caffeine looking for a keyboard.",
+  "Deep work in progress · do not decaf.",
+  "Latency is just coffee that hasn't kicked in yet.",
+  "The best time to brew was 5 hours ago. The second best time is now.",
+  "Rate limit reached: 400 mg/day. Retry tomorrow.",
+  "Zero-shot? No. Two-shot. Doppio.",
+  "Pair programming: me, the model, and a pot of filter.",
+  "Half-life is just exponential backoff for humans.",
+  "Green tea for the review. Espresso for the merge.",
+  "Work is energy over time. Coffee is energy over espresso.",
+  "Your bedtime is a deadline. The half-life is the sprint.",
+  "Tokens per second scale with milligrams per cup. Citation needed."
 ]
 
 function preset(kind) {
@@ -67,25 +99,53 @@ function singleDoseLimit(kg) {
   return Math.min(200, Math.round(MG_PER_KG_DOSE * weight))
 }
 
+// ---- locale ----------------------------------------------------------------
+
 function pad2(n) { return (n < 10 ? "0" : "") + n }
 
+// Locale short time, e.g. "23:05" or "11:05 PM".
 function formatTime(date) {
   if (!date) return "—"
-  return pad2(date.getHours()) + ":" + pad2(date.getMinutes())
+  try {
+    return Qt.formatTime(date, Qt.locale().timeFormat(1))
+  } catch (e) {
+    return pad2(date.getHours()) + ":" + pad2(date.getMinutes())
+  }
 }
 
-// "12:31" today, "12:31 tomorrow" otherwise.
+function sameDay(a, b) {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth()
+    && a.getDate() === b.getDate()
+}
+
+// "11:05 PM" today, "11:05 PM tomorrow" otherwise.
 function formatTimeFrom(date, now) {
   if (!date) return "—"
   var time = formatTime(date)
-  var sameDay = date.getFullYear() === now.getFullYear()
-    && date.getMonth() === now.getMonth() && date.getDate() === now.getDate()
-  if (sameDay) return time
+  if (sameDay(date, now)) return time
   var tomorrow = new Date(now.getTime() + 24 * 3600 * 1000)
-  var isTomorrow = date.getFullYear() === tomorrow.getFullYear()
-    && date.getMonth() === tomorrow.getMonth() && date.getDate() === tomorrow.getDate()
-  return time + (isTomorrow ? " tomorrow" : " in " + Math.round((date - now) / 3600000) + " h")
+  if (sameDay(date, tomorrow)) return time + " tomorrow"
+  return time + " in " + Math.round((date - now) / 3600000) + " h"
 }
+
+function usesTwelveHourClock() {
+  try {
+    return /a/i.test(Qt.locale().timeFormat(1))
+  } catch (e) {
+    return false
+  }
+}
+
+function usesImperialWeight() {
+  try {
+    return Qt.locale().measurementSystem !== 0
+  } catch (e) {
+    return false
+  }
+}
+
+function kgToLb(kg) { return Math.round(Number(kg) * 2.20462) }
+function lbToKg(lb) { return Math.round(Number(lb) / 2.20462) }
 
 function formatDuration(ms) {
   var minutes = Math.max(0, Math.round(ms / 60000))
@@ -96,29 +156,40 @@ function formatDuration(ms) {
   return hours + " h " + rest + " min"
 }
 
+// ---- bedtime ---------------------------------------------------------------
+
+// Accepts "23:00", "23.00", "11:00 PM", "11 pm", "11:00pm".
 function parseBedtime(text) {
-  var match = /^\s*(\d{1,2})[:.](\d{2})\s*$/.exec(String(text || ""))
-  if (!match) return { hours: 23, minutes: 0 }
-  var h = Math.min(23, Math.max(0, parseInt(match[1], 10)))
-  var m = Math.min(59, Math.max(0, parseInt(match[2], 10)))
+  var raw = String(text || "").trim()
+  var match = /^(\d{1,2})(?:[:.](\d{2}))?\s*([aApP][mM]?)?\.?$/.exec(raw)
+  if (!match) return null
+  var h = parseInt(match[1], 10)
+  var m = match[2] ? parseInt(match[2], 10) : 0
+  var suffix = match[3] ? match[3].toLowerCase().charAt(0) : ""
+  if (suffix === "p" && h < 12) h += 12
+  if (suffix === "a" && h === 12) h = 0
+  if (h > 23 || m > 59) return null
   return { hours: h, minutes: m }
 }
 
-function validBedtime(text) {
-  return /^\s*([01]?\d|2[0-3])[:.]([0-5]\d)\s*$/.test(String(text || ""))
+function validBedtime(text) { return parseBedtime(text) !== null }
+
+// Stored form is always 24-hour "HH:MM".
+function normalizedBedtime(text) {
+  var parsed = parseBedtime(text) || { hours: 23, minutes: 0 }
+  return pad2(parsed.hours) + ":" + pad2(parsed.minutes)
 }
 
-function normalizedBedtime(text) {
-  var parsed = parseBedtime(text)
-  return pad2(parsed.hours) + ":" + pad2(parsed.minutes)
+function bedtimeAsDate(text, now) {
+  var parsed = parseBedtime(text) || { hours: 23, minutes: 0 }
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate(),
+    parsed.hours, parsed.minutes, 0, 0)
 }
 
 // The next bedtime at or after `now`. A bedtime earlier than now today
 // means tonight's has passed, so the next one is tomorrow.
 function nextBedtime(now, bedtimeText) {
-  var parsed = parseBedtime(bedtimeText)
-  var candidate = new Date(now.getFullYear(), now.getMonth(), now.getDate(),
-    parsed.hours, parsed.minutes, 0, 0)
+  var candidate = bedtimeAsDate(bedtimeText, now)
   if (candidate.getTime() <= now.getTime())
     candidate = new Date(candidate.getTime() + 24 * 3600 * 1000)
   return candidate
@@ -127,6 +198,8 @@ function nextBedtime(now, bedtimeText) {
 function startOfDay(now) {
   return new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0)
 }
+
+// ---- drinks ----------------------------------------------------------------
 
 function drinkTime(drink) {
   var t = drink && drink.t ? new Date(drink.t) : null
@@ -163,6 +236,8 @@ function lastDrink(drinks) {
   }
   return latest
 }
+
+// ---- pharmacokinetics --------------------------------------------------------
 
 // One-compartment first-order elimination: every drink decays independently
 // with the same half-life. Absorption is fast (30-60 min), so the model
@@ -220,6 +295,17 @@ function cutoff(drinks, now, bedtimeText, halfLifeHrs, limitAtBed, doseMg) {
     return { status: "passed", time: latest, bedtime: bed, atBedtime: current }
   return { status: "until", time: latest, bedtime: bed, atBedtime: current }
 }
+
+// Body level sampled every `stepMinutes` from `from` to `to` (inclusive).
+function timeline(drinks, from, to, stepMinutes, halfLifeHrs) {
+  var points = []
+  var step = Math.max(1, stepMinutes) * 60000
+  for (var t = from.getTime(); t <= to.getTime(); t += step)
+    points.push({ t: t, mg: inBody(drinks, new Date(t), halfLifeHrs) })
+  return points
+}
+
+// ---- misc ------------------------------------------------------------------
 
 function quote(seed) {
   var index = Math.abs(Math.floor(Number(seed) || 0)) % QUOTES.length

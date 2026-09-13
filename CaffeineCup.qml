@@ -22,6 +22,15 @@ Item {
   readonly property color liquidDeep: "#3d2618"
   readonly property color crema: overLimit ? urgent : "#c39a6b"
 
+  // Geometry shared by the canvas and the centred label. The cup body sits
+  // slightly left of centre so the handle has room on the right.
+  readonly property real bodyW: Math.min(width * 0.62, height * 0.62)
+  readonly property real bodyH: bodyW * 1.05
+  readonly property real bodyX: (width - bodyW) / 2 - bodyW * 0.08
+  readonly property real bodyBottom: height - Math.max(6, height * 0.06)
+  readonly property real bodyTop: bodyBottom - bodyH
+  readonly property real lineW: Math.max(2, bodyW * 0.035)
+
   property real shownLevel: 0
   property real phase: 0
 
@@ -56,16 +65,12 @@ Item {
       var w = width, h = height
       ctx.clearRect(0, 0, w, h)
 
-      // Geometry: cup body occupies the lower ~70 %, steam above it.
-      var bodyW = Math.min(w * 0.62, h * 0.62)
-      var bodyH = bodyW * 1.05
-      var x0 = (w - bodyW) / 2 - bodyW * 0.08
-      var y1 = h - Math.max(6, h * 0.06)
-      var y0 = y1 - bodyH
+      var bodyW = root.bodyW, bodyH = root.bodyH
+      var x0 = root.bodyX, y0 = root.bodyTop, y1 = root.bodyBottom
       var r = Math.min(bodyW * 0.22, 18)
       var fg = root.foreground
       var stroke = Qt.rgba(fg.r, fg.g, fg.b, 0.9)
-      var lineW = Math.max(2, bodyW * 0.035)
+      var lineW = root.lineW
 
       function bodyPath() {
         ctx.beginPath()
@@ -159,9 +164,10 @@ Item {
     }
   }
 
+  // Label centred on the cup body, not on the whole item.
   Column {
-    anchors.centerIn: parent
-    anchors.verticalCenterOffset: parent.height * 0.14
+    x: root.bodyX + root.bodyW / 2 - width / 2
+    y: root.bodyTop + root.bodyH / 2 - height / 2
     spacing: Style.space(2)
 
     Text {

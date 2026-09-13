@@ -17,11 +17,11 @@ Requires Omarchy 4. No extra packages.
 
 ## What it does
 
-- **One-click logging** of Espresso, Coffee, Black Tea, Green Tea, Matcha,
-  Cola, Red Bull and Monster, each with a single-colour outline icon that
-  follows your theme. The most recent drink is highlighted and becomes the
-  big "Log …" button; middle-click the bar icon or press Enter in the panel
-  to log it again.
+- **One-click logging** of fifteen drinks — Espresso, Doppio, Americano,
+  Cappuccino, Latte, Flat White, Filter, Cold Brew, Decaf, Black Tea, Green
+  Tea, Matcha, Cola, Red Bull and Monster — each with a single-colour outline
+  icon that follows your theme. The most recent drink is highlighted;
+  middle-click the bar icon or press Enter in the panel to log it again.
 - **The cup.** A mug that fills with coffee as today's intake approaches the
   daily limit. Steam rises while there is caffeine in it. Past the limit the
   crema turns your theme's urgent colour.
@@ -32,6 +32,11 @@ Requires Omarchy 4. No extra packages.
 - **Cut-off.** A half-life model tells you the latest time you can have one
   more of your usual drink and still be under your bedtime limit. If that time
   has passed you get told to switch to decaf.
+- **Timeline.** A pixel graph in your theme's colours: caffeine in your
+  system so far, the predicted decay from now, the bedtime limit and bedtime
+  itself.
+- **Your locale.** Times follow your system's 12/24-hour setting and weight
+  is shown in pounds for imperial locales.
 - **Settings** live in the panel and on the bar entry: body weight (for the
   recommended limit), typical activity (sitting, standing, moving around),
   optimal bedtime, daily limit, allowed caffeine at bedtime, and whether the
@@ -41,13 +46,15 @@ Requires Omarchy 4. No extra packages.
 
 Caffeine follows first-order elimination: every drink decays independently
 with the same half-life. The half-life depends on the activity setting
-(5.5 h sitting, 5 h standing, 4.5 h moving), inside the 3 to 7 hours quoted
-for healthy adults. Each drink is treated as fully absorbed when logged,
+(5 h sitting, 4.75 h standing, 4.5 h moving); adults average about 5 hours
+with a range of roughly 3 to 7. Each drink is treated as fully absorbed when logged,
 which errs on the safe side for the cut-off.
 
 Limits follow EFSA guidance: 400 mg per day (about 5.7 mg per kg) and 200 mg
-per single dose carry no safety concern for healthy adults. The bedtime limit
-defaults to 50 mg. None of this is medical advice.
+per single dose carry no safety concern for healthy adults, and 100 mg close
+to bedtime may affect sleep, which is where the default bedtime limit of
+100 mg comes from. Tighten it in settings if you sleep lightly. None of this
+is medical advice.
 
 For a drink of `D` mg, a bedtime `B`, half-life `h` and bedtime limit `L`,
 with `C` mg already projected at bedtime from earlier drinks, the cut-off is

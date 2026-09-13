@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "io.github.sonderbydk.omacaffeine",
   "name": "OmaCaffeine",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "author": "Peter Sønderby",
   "license": "MIT",
   "description": "Caffeine tracker for the Omarchy bar: log your espresso, tea or energy drink, watch the cup fill up, and know when to stop so you still sleep tonight.",
@@ -27,7 +27,7 @@
       "activity": "Sitting",
       "bedtime": "23:00",
       "dailyLimitMg": 400,
-      "bedtimeLimitMg": 50,
+      "bedtimeLimitMg": 100,
       "barDisplay": "Icon"
     },
     "schema": [
@@ -39,7 +39,7 @@
         "max": 250,
         "step": 1,
         "defaultValue": 80,
-        "description": "Used for the recommended daily limit (5.7 mg per kg, capped at 400 mg)."
+        "description": "Stored in kg; the panel shows pounds when your locale is imperial. Used for the recommended daily limit (5.7 mg per kg, capped at 400 mg)."
       },
       {
         "key": "activity",
@@ -51,14 +51,14 @@
           "Moving around"
         ],
         "defaultValue": "Sitting",
-        "description": "Rough activity level. Moving clears caffeine a little faster than sitting at a desk."
+        "description": "Rough activity level. Half-life 5 h sitting, 4.75 h standing, 4.5 h moving around."
       },
       {
         "key": "bedtime",
         "type": "string",
         "label": "Optimal bedtime",
         "defaultValue": "23:00",
-        "description": "24-hour HH:MM. The cut-off is computed so caffeine is under the bedtime limit by then."
+        "description": "Stored as 24-hour HH:MM; the panel shows and accepts your locale's format."
       },
       {
         "key": "dailyLimitMg",
@@ -77,8 +77,8 @@
         "min": 0,
         "max": 200,
         "step": 5,
-        "defaultValue": 50,
-        "description": "How much may still be in your system at bedtime."
+        "defaultValue": 100,
+        "description": "How much may still be in your system at bedtime. EFSA notes 100 mg close to bedtime may affect sleep."
       },
       {
         "key": "barDisplay",
