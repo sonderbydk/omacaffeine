@@ -22,7 +22,7 @@ Item {
   readonly property int cell: Math.max(3, Style.space(4))
   readonly property int gap: 1
   readonly property real axisLeft: Style.space(34)
-  readonly property real axisBottom: Style.space(16)
+  readonly property real axisBottom: Style.space(22)
   readonly property color dim: Qt.darker(foreground, 1.4)
 
   // Window: an hour before the first drink today (or 07:00), through two
@@ -147,7 +147,7 @@ Item {
         var dts = dt.getTime()
         if (dts < from || dts > to) continue
         var dx = plotX + Math.round((dts - from) / span * plotW)
-        ctx.fillRect(dx - 2, plotH + 2, 4, 4)
+        ctx.fillRect(dx - 2, plotH + 1, 4, 4)
       }
 
       // Axes: mg on the left, hours along the bottom.
@@ -170,7 +170,7 @@ Item {
         var hl = Model.formatTime(hd)
         var hw = ctx.measureText(hl).width
         if (hx + hw > width) continue
-        ctx.fillText(hl, hx, plotH + 8)
+        ctx.fillText(hl, hx, plotH + 7)
       }
     }
   }
