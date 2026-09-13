@@ -11,8 +11,9 @@ the full history of decisions; this file holds what you need to keep going.
 | --- | --- |
 | `manifest.json` | Plugin id `io.github.sonderbydk.omacaffeine`, bar-widget entry point, settings schema (`defaults` + `schema`). Bump `version` on releases. |
 | `BarWidget.qml` | Bar icon (`󰅶`) + optional mg/% label. Loads `Panel.qml`, injects `bar`, `settings`, `shell`, `anchorItem`, `hostWidget`. |
-| `Panel.qml` | The drop-down: pages `main` / `settings`, stats, drink grid, timeline, today's log, IPC handler, persistence. |
-| `Model.js` | Pure functions: presets, half-life model, cut-off, formatting, log (de)serialisation, headings/quotes. Test-friendly. |
+| `Panel.qml` | The drop-down: pages `main` / `settings` / `week` / `drink` (editor), stats, drink grid, timeline with backdating, today's log, IPC handler, persistence. |
+| `Model.js` | Pure functions: presets, drinks config (custom drinks + mg overrides), half-life model, cut-off, week totals, token/caffeine analysis, formatting, log (de)serialisation, headings/quotes. Test-friendly. |
+| `tokens.py` | Runtime script: output tokens per local hour from `~/.claude/projects/**/*.jsonl` (dedupe by message id) and `~/.codex/sessions/**/*.jsonl` (delta of cumulative totals). Run by a `Process` from the panel, ~0.3 s. |
 | `CaffeineCup.qml` | Canvas mug that fills to `level`; overflow state past 1.0. |
 | `CaffeineGraph.qml` | Pixel timeline; new/removed cells fade. |
 | `DrinkIcon.qml` | Outline icons as SVG path strings in a 24×24 box, `QtQuick.Shapes`. |
@@ -20,8 +21,10 @@ the full history of decisions; this file holds what you need to keep going.
 | `dev/harness.sh` | Standalone Quickshell window to eyeball components without the bar. |
 
 Runtime files (not in the repo): log `~/.local/state/omacaffeine/log.json`
-(three days of drinks), settings inline on the widget entry in
-`~/.config/omarchy/shell.json`.
+(eight days of drinks; entries carry `icon` for custom drinks), custom drinks
+and preset overrides in `~/.config/omacaffeine/drinks.json`
+(`{custom:[{kind,name,mg,icon}], overrides:{espresso:126}}`), settings inline
+on the widget entry in `~/.config/omarchy/shell.json`.
 
 ## Dev loop
 
@@ -43,9 +46,18 @@ Drive it without clicking:
 ```bash
 omarchy shell io.github.sonderbydk.omacaffeine toggle | show | hide | settings
 omarchy shell io.github.sonderbydk.omacaffeine log espresso     # any preset kind
+omarchy shell io.github.sonderbydk.omacaffeine logAt espresso 09:00   # back in time
 omarchy shell io.github.sonderbydk.omacaffeine logLast | undo
-omarchy shell io.github.sonderbydk.omacaffeine status
+omarchy shell io.github.sonderbydk.omacaffeine status | drinks
+omarchy shell io.github.sonderbydk.omacaffeine week                   # week page
+omarchy shell io.github.sonderbydk.omacaffeine edit espresso | edit new   # editor page
 ```
+
+The shell is started by `omarchy restart shell` as a child of the calling
+shell, so its stderr lands in that command's output; QML errors show up
+there (or via `qs log`). Kill stale harness windows by PID, never with
+`pkill -f omacaffeine-harness` (it matches your own bash too), and the
+panel layer geometry on eDP-1 is `560,1440 1440x900` for `grim -g`.
 
 Screenshots: `grim -g "<x>,<y> <w>x<h>" out.png`; geometry from
 `hyprctl clients -j` / `hyprctl layers -j` (the panel is a layer named
@@ -89,11 +101,22 @@ part of the product: headings and quotes live in `Model.js`. Text that could
 overflow goes in `ScrollingText`, never wraps. Baseline-align labels and
 values. Commits end with the Claude co-author trailer.
 
+## Week page and the token analysis
+
+Seven columns (small `CaffeineCup` with `animated: false`, mg, weekday, cups,
+then a bar of the day's agent output tokens). Below: totals, trend (least
+squares slope per day), then "caffeine × tokens": active hours (any tokens)
+bucketed by caffeine in the body at mid-hour, mean tokens/hour per bucket,
+sweet spot = best bucket with ≥ 2 hours, Pearson r over active hours. Copy
+says "correlation, not causation" on purpose; keep it honest. Tokens are
+refreshed at most every two minutes when the panel opens or the page shows.
+
 ## Backlog (from the owner)
 
 - Desktop notification at cut-off and when under the bedtime limit.
-- Custom drinks (name, mg, icon) and per-preset mg overrides.
-- Weekly history view; click on the graph to log a drink back in time.
 - Bar option showing "cut-off in 2 h 14 min".
 - CSV export.
 - Publish to GitHub as `sonderbydk/omacaffeine` (README already assumes it).
+
+Done in 0.4.0: custom drinks + per-preset mg overrides, week page with
+agent tokens, click-to-backdate on the graph, flash over the cup.

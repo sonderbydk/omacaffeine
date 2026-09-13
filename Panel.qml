@@ -136,7 +136,6 @@ Panel {
   readonly property var weekTokens: week.map(function(d) { return Model.tokensForDay(tokens.hours, d.date) })
   readonly property int weekAvgMg: Math.round(Model.mean(week.map(function(d) { return d.mg })))
   readonly property real weekAvgDrinks: Model.mean(week.map(function(d) { return d.count }))
-  readonly property int weekMaxMg: Math.max(dailyLimitMg, Math.max.apply(null, week.map(function(d) { return d.mg })))
   readonly property var weekPeak: week.reduce(function(best, d) { return !best || d.mg > best.mg ? d : best }, null)
   readonly property int weekTokenTotal: weekTokens.reduce(function(a, b) { return a + b }, 0)
   readonly property int weekTokenMax: Math.max(1, Math.max.apply(null, weekTokens))
