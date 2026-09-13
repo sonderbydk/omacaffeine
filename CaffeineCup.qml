@@ -1,10 +1,11 @@
 import QtQuick
 import qs.Commons
 
-// The hero: a mug that fills with coffee as the day's caffeine approaches
-// the daily limit. Outline and label follow the theme; the liquid stays
-// coffee-brown because some things are sacred. Past the limit the crema
-// turns the theme's urgent colour.
+// The hero: a mug that fills with coffee exactly as far as today's caffeine
+// is towards the daily limit. Outline and label follow the theme; the
+// liquid stays coffee-brown because some things are sacred. Empty at 0 %.
+// Past the limit it is a stack overflow: the crema turns the theme's
+// urgent colour and the steam and surface get restless.
 Item {
   id: root
 
@@ -14,13 +15,14 @@ Item {
   property string fontFamily: Style.font.family
   property string label: ""
   property string sublabel: ""
-  property bool steaming: level > 0.02
 
   readonly property real clampedLevel: Math.max(0, Math.min(1, level))
   readonly property bool overLimit: level > 1
+  readonly property bool empty: level <= 0.005
+  readonly property bool steaming: !empty
   readonly property color liquid: "#5a3a26"
   readonly property color liquidDeep: "#3d2618"
-  readonly property color crema: overLimit ? urgent : "#c39a6b"
+  readonly property color crema: "#c39a6b"
 
   // Geometry shared by the canvas and the centred label. The cup body sits
   // slightly left of centre so the handle has room on the right.
@@ -31,14 +33,20 @@ Item {
   readonly property real bodyTop: bodyBottom - bodyH
   readonly property real lineW: Math.max(2, bodyW * 0.035)
 
-  property real shownLevel: 0
+  property real shownLevel: clampedLevel
+  property bool animate: false
   property real phase: 0
+  property real jitter: 0
 
   Behavior on shownLevel {
+    enabled: root.animate
     NumberAnimation { duration: 700; easing.type: Easing.InOutCubic }
   }
-  onLevelChanged: shownLevel = clampedLevel
-  Component.onCompleted: shownLevel = clampedLevel
+  // First paint shows the real level without an animation from empty.
+  Component.onCompleted: {
+    shownLevel = clampedLevel
+    animate = true
+  }
   onShownLevelChanged: canvas.requestPaint()
   onForegroundChanged: canvas.requestPaint()
   onOverLimitChanged: canvas.requestPaint()
@@ -46,11 +54,12 @@ Item {
   onHeightChanged: canvas.requestPaint()
 
   Timer {
-    interval: 70
+    interval: root.overLimit ? 45 : 70
     running: root.visible && root.steaming
     repeat: true
     onTriggered: {
-      root.phase = (root.phase + 0.08) % (Math.PI * 2)
+      root.phase = (root.phase + (root.overLimit ? 0.32 : 0.08)) % (Math.PI * 2)
+      root.jitter = root.overLimit ? (Math.random() - 0.5) : 0
       canvas.requestPaint()
     }
   }
@@ -68,9 +77,10 @@ Item {
       var bodyW = root.bodyW, bodyH = root.bodyH
       var x0 = root.bodyX, y0 = root.bodyTop, y1 = root.bodyBottom
       var r = Math.min(bodyW * 0.22, 18)
-      var fg = root.foreground
+      var fg = root.foreground, ur = root.urgent
       var stroke = Qt.rgba(fg.r, fg.g, fg.b, 0.9)
       var lineW = root.lineW
+      var angry = root.overLimit
 
       function bodyPath() {
         ctx.beginPath()
@@ -83,20 +93,25 @@ Item {
         ctx.closePath()
       }
 
-      // Liquid, clipped to the cup body.
+      // Liquid, clipped to the cup body. The fill height is proportional to
+      // the level between the inner bottom and the rim.
       var lvl = root.shownLevel
       if (lvl > 0.005) {
         ctx.save()
         bodyPath()
         ctx.clip()
-        var top = y1 - lineW - (bodyH - lineW * 2) * lvl
-        var wave = Math.max(1.5, bodyW * 0.02)
+        var inner = bodyH - lineW * 2
+        var top = y1 - lineW - inner * lvl
+        var wave = angry ? Math.max(3, bodyW * 0.05) : Math.max(1.5, bodyW * 0.02)
+        var freq = angry ? 3 : 2
         ctx.beginPath()
         ctx.moveTo(x0, y1)
         ctx.lineTo(x0, top)
-        for (var px = x0; px <= x0 + bodyW; px += 4) {
+        for (var px = x0; px <= x0 + bodyW; px += 3) {
           var t = (px - x0) / bodyW
-          ctx.lineTo(px, top + Math.sin(t * Math.PI * 2 + root.phase) * wave)
+          var yy = top + Math.sin(t * Math.PI * freq + root.phase) * wave
+          if (angry) yy += Math.sin(t * 17 + root.phase * 2.3) * wave * 0.4 + root.jitter * 2
+          ctx.lineTo(px, yy)
         }
         ctx.lineTo(x0 + bodyW, y1)
         ctx.closePath()
@@ -106,16 +121,19 @@ Item {
         ctx.fillStyle = grad
         ctx.fill()
 
-        // Crema line.
+        // Crema line: calm gold, or the urgent colour boiling over.
         ctx.beginPath()
-        for (var cx = x0; cx <= x0 + bodyW; cx += 4) {
+        for (var cx = x0; cx <= x0 + bodyW; cx += 3) {
           var ct = (cx - x0) / bodyW
-          var cy = top + Math.sin(ct * Math.PI * 2 + root.phase) * wave
+          var cy = top + Math.sin(ct * Math.PI * freq + root.phase) * wave
+          if (angry) cy += Math.sin(ct * 17 + root.phase * 2.3) * wave * 0.4 + root.jitter * 2
           if (cx === x0) ctx.moveTo(cx, cy)
           else ctx.lineTo(cx, cy)
         }
-        ctx.strokeStyle = root.crema
-        ctx.lineWidth = Math.max(2, lineW * 1.1)
+        ctx.strokeStyle = angry
+          ? Qt.rgba(ur.r, ur.g, ur.b, 0.75 + Math.abs(root.jitter) * 0.5)
+          : root.crema
+        ctx.lineWidth = Math.max(2, lineW * (angry ? 1.5 : 1.1))
         ctx.stroke()
         ctx.restore()
       }
@@ -144,28 +162,33 @@ Item {
       ctx.lineCap = "round"
       ctx.stroke()
 
-      // Steam: three wisps, drifting with the phase.
+      // Steam: three wisps drifting with the phase; frantic when over.
       if (root.steaming) {
-        ctx.strokeStyle = Qt.rgba(fg.r, fg.g, fg.b, 0.45)
+        ctx.strokeStyle = angry
+          ? Qt.rgba(ur.r, ur.g, ur.b, 0.55)
+          : Qt.rgba(fg.r, fg.g, fg.b, 0.45)
         ctx.lineWidth = Math.max(1.5, lineW * 0.8)
         var baseY = y0 - lineW * 2
-        var wispH = Math.max(14, bodyH * 0.32)
-        for (var i = 0; i < 3; i++) {
-          var sx = x0 + bodyW * (0.28 + i * 0.22)
-          var drift = Math.sin(root.phase + i * 1.3) * bodyW * 0.03
+        var wispH = Math.max(14, bodyH * (angry ? 0.42 : 0.32))
+        var count = angry ? 5 : 3
+        for (var i = 0; i < count; i++) {
+          var sx = x0 + bodyW * (angry ? 0.18 + i * 0.16 : 0.28 + i * 0.22)
+          var drift = Math.sin(root.phase + i * 1.3) * bodyW * (angry ? 0.09 : 0.03)
+          var shake = angry ? root.jitter * bodyW * 0.06 : 0
           ctx.beginPath()
           ctx.moveTo(sx, baseY)
-          ctx.bezierCurveTo(sx - bodyW * 0.08 + drift, baseY - wispH * 0.35,
-            sx + bodyW * 0.08 + drift, baseY - wispH * 0.65,
-            sx + drift * 0.5, baseY - wispH)
+          ctx.bezierCurveTo(sx - bodyW * 0.08 + drift + shake, baseY - wispH * 0.35,
+            sx + bodyW * 0.08 + drift - shake, baseY - wispH * 0.65,
+            sx + drift * 0.5 + shake, baseY - wispH)
           ctx.stroke()
         }
       }
     }
   }
 
-  // Label centred on the cup body, not on the whole item.
+  // Label centred on the cup body, hidden while the cup is empty.
   Column {
+    visible: !root.empty
     x: root.bodyX + root.bodyW / 2 - width / 2
     y: root.bodyTop + root.bodyH / 2 - height / 2
     spacing: Style.space(2)
@@ -173,7 +196,7 @@ Item {
     Text {
       anchors.horizontalCenter: parent.horizontalCenter
       text: root.label
-      color: root.shownLevel > 0.45 ? "#f3e6d6" : root.foreground
+      color: root.overLimit ? root.urgent : (root.shownLevel > 0.45 ? "#f3e6d6" : root.foreground)
       font.family: root.fontFamily
       font.pixelSize: Style.font.displayLarge
       font.bold: true
@@ -184,10 +207,11 @@ Item {
       anchors.horizontalCenter: parent.horizontalCenter
       visible: root.sublabel !== ""
       text: root.sublabel
-      color: root.shownLevel > 0.3 ? "#f3e6d6" : Qt.darker(root.foreground, 1.4)
+      color: root.overLimit ? root.urgent : (root.shownLevel > 0.3 ? "#f3e6d6" : Qt.darker(root.foreground, 1.4))
       font.family: root.fontFamily
       font.pixelSize: Style.font.caption
-      opacity: 0.9
+      font.bold: root.overLimit
+      opacity: 0.95
     }
   }
 }

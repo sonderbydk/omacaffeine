@@ -40,6 +40,26 @@ var MG_PER_KG_DOSE = 3
 var DAILY_CAP = 400
 var DEFAULT_BEDTIME_LIMIT = 100
 
+// Headings for the drink grid. Developers deserve a hype man.
+var HEADINGS = [
+  "Choose your weapon, code warrior",
+  "Pick your fuel, kernel hacker",
+  "What powers the next commit?",
+  "Select a dependency for this sprint",
+  "Refuel the compiler",
+  "Which beverage compiles your genius?",
+  "Inject caffeine into main()",
+  "Load balancer for your brain",
+  "Pick a potion, wizard of the shell",
+  "Fuel up, 10x developer",
+  "What's brewing in your pipeline?",
+  "Choose your build agent",
+  "Select a runtime for greatness",
+  "Deploy a beverage to production (you)",
+  "Your next token generator",
+  "Hydrate the neural net"
+]
+
 var QUOTES = [
   "Good code is written on caffeine.",
   "caffeine × tokens = production",
@@ -103,11 +123,28 @@ function singleDoseLimit(kg) {
 
 function pad2(n) { return (n < 10 ? "0" : "") + n }
 
-// Locale short time, e.g. "23:05" or "11:05 PM".
-function formatTime(date) {
+// Locale short time format, e.g. "HH:mm" or "h:mm AP".
+function localeTimeFormat() {
+  try {
+    return Qt.locale().timeFormat(1)
+  } catch (e) {
+    return "HH:mm"
+  }
+}
+
+// A time format derived from the Omarchy clock widget's own format string:
+// anything with an AM/PM token is 12-hour, otherwise 24-hour.
+function timeFormatFromClock(clockFormat) {
+  var f = String(clockFormat || "")
+  if (!f) return localeTimeFormat()
+  return /ap/i.test(f) ? "h:mm AP" : "HH:mm"
+}
+
+// Format `date` with `fmt` (falls back to the locale short time).
+function formatTime(date, fmt) {
   if (!date) return "—"
   try {
-    return Qt.formatTime(date, Qt.locale().timeFormat(1))
+    return Qt.formatTime(date, fmt || localeTimeFormat())
   } catch (e) {
     return pad2(date.getHours()) + ":" + pad2(date.getMinutes())
   }
@@ -119,9 +156,9 @@ function sameDay(a, b) {
 }
 
 // "11:05 PM" today, "11:05 PM tomorrow" otherwise.
-function formatTimeFrom(date, now) {
+function formatTimeFrom(date, now, fmt) {
   if (!date) return "—"
-  var time = formatTime(date)
+  var time = formatTime(date, fmt)
   if (sameDay(date, now)) return time
   var tomorrow = new Date(now.getTime() + 24 * 3600 * 1000)
   if (sameDay(date, tomorrow)) return time + " tomorrow"
@@ -310,6 +347,27 @@ function timeline(drinks, from, to, stepMinutes, halfLifeHrs) {
 function quote(seed) {
   var index = Math.abs(Math.floor(Number(seed) || 0)) % QUOTES.length
   return QUOTES[index]
+}
+
+function heading(seed) {
+  var index = Math.abs(Math.floor(Number(seed) || 0)) % HEADINGS.length
+  return HEADINGS[index]
+}
+
+// The clock widget's format string from a shell.json document, or "".
+function clockFormatFromShellConfig(raw) {
+  try {
+    var config = JSON.parse(String(raw || ""))
+    var layout = config && config.bar && config.bar.layout ? config.bar.layout : {}
+    var sections = ["left", "center", "right"]
+    for (var s = 0; s < sections.length; s++) {
+      var rows = Array.isArray(layout[sections[s]]) ? layout[sections[s]] : []
+      for (var i = 0; i < rows.length; i++)
+        if (rows[i] && rows[i].id === "omarchy.clock" && rows[i].format)
+          return String(rows[i].format)
+    }
+  } catch (e) {}
+  return ""
 }
 
 function emptyLog() {

@@ -23,14 +23,21 @@ Panel {
   // ---- state -------------------------------------------------------------
   property var log: Model.emptyLog()
   property date now: new Date()
-  property bool settingsOpen: false
-  property int quoteSeed: Math.floor(Math.random() * 1000)
+  property string page: "main"          // "main" | "settings"
+  property int seed: Math.floor(Math.random() * 1000)
   property string bedtimeDraft: ""
   property string flash: ""
+  property string clockFormat: ""
 
   readonly property string stateDir: Quickshell.env("XDG_STATE_HOME")
     || (Quickshell.env("HOME") + "/.local/state")
   readonly property string logPath: stateDir + "/omacaffeine/log.json"
+  readonly property string shellConfigPath: (Quickshell.env("XDG_CONFIG_HOME")
+    || (Quickshell.env("HOME") + "/.config")) + "/omarchy/shell.json"
+
+  // Times follow the Omarchy clock widget (24-hour unless it shows AM/PM),
+  // and fall back to the system locale when no clock is configured.
+  readonly property string timeFmt: Model.timeFormatFromClock(clockFormat)
 
   // ---- settings ----------------------------------------------------------
   readonly property int bodyWeightKg: Math.max(1, Number(setting("bodyWeightKg", 80)) || 80)
@@ -59,21 +66,21 @@ Panel {
   readonly property var cutoff: Model.cutoff(log.drinks, now, bedtime, halfLife,
     bedtimeLimitMg, lastPreset.mg)
   readonly property var caffeineFreeAt: Model.timeUntilBelow(log.drinks, now, halfLife, 10)
-  readonly property string bedtimeLabel: Model.formatTime(Model.bedtimeAsDate(bedtime, now))
+  readonly property string bedtimeLabel: Model.formatTime(Model.bedtimeAsDate(bedtime, now), timeFmt)
   readonly property bool cutoffOk: cutoff.status === "clear" || cutoff.status === "until"
   readonly property string statusLine: {
     var c = cutoff
     if (c.status === "clear")
-      return "Clear for bedtime · one more " + lastPreset.name + " still fits"
+      return "Clear for bedtime · another " + lastPreset.name + " still fits"
     if (c.status === "until")
-      return "Cut-off " + Model.formatTimeFrom(c.time, now) + " for a " + lastPreset.name
+      return "Cut-off " + Model.formatTimeFrom(c.time, now, timeFmt) + " for another " + lastPreset.name
     if (c.status === "passed")
-      return "Past cut-off for a " + lastPreset.name + " · decaf from here"
+      return "Past cut-off for another " + lastPreset.name + " · decaf from here"
     return "Over the bedtime limit · under " + bedtimeLimitMg + " mg by "
-      + Model.formatTimeFrom(c.time, now)
+      + Model.formatTimeFrom(c.time, now, timeFmt)
   }
   readonly property string firstLine: first
-    ? "First caffeine today: " + Model.formatTime(Model.drinkTime(first))
+    ? "First caffeine today: " + Model.formatTime(Model.drinkTime(first), timeFmt)
       + " · " + first.name
     : "Let's brew you some coffee — you deserve it!"
   readonly property color foreground: bar ? bar.foreground : Color.foreground
@@ -101,13 +108,21 @@ Panel {
 
   function close() {
     setCenterHoverRevealSuppressed(false)
-    settingsOpen = false
+    page = "main"
     root.controller.hide()
   }
 
   function toggle() {
     if (root.opened) root.close()
     else root.openFromHotkey()
+  }
+
+  function goBack() {
+    if (page !== "main") {
+      page = "main"
+      return true
+    }
+    return false
   }
 
   function switchPanel(direction) {
@@ -125,8 +140,9 @@ Panel {
 
   function refresh() {
     now = new Date()
-    quoteSeed = Math.floor(Math.random() * 1000)
+    seed = Math.floor(Math.random() * 1000)
     logFile.reload()
+    shellConfigFile.reload()
   }
 
   // ---- log ---------------------------------------------------------------
@@ -199,10 +215,11 @@ Panel {
     }
     var normalized = Model.normalizedBedtime(bedtimeDraft)
     if (normalized !== bedtime) saveSetting("bedtime", normalized)
-    bedtimeDraft = Model.formatTime(Model.bedtimeAsDate(normalized, now))
+    bedtimeDraft = Model.formatTime(Model.bedtimeAsDate(normalized, now), timeFmt)
   }
 
   onSettingsChanged: bedtimeDraft = bedtimeLabel
+  onTimeFmtChanged: bedtimeDraft = bedtimeLabel
   Component.onCompleted: {
     bedtimeDraft = bedtimeLabel
     ensureStateDir.running = true
@@ -223,6 +240,16 @@ Panel {
     onFileChanged: reload()
     onLoaded: root.log = Model.pruneLog(Model.parseLog(text()), new Date())
     onLoadFailed: root.log = Model.emptyLog()
+  }
+
+  FileView {
+    id: shellConfigFile
+    path: root.shellConfigPath
+    watchChanges: true
+    printErrors: false
+    onFileChanged: reload()
+    onLoaded: root.clockFormat = Model.clockFormatFromShellConfig(text())
+    onLoadFailed: root.clockFormat = ""
   }
 
   Timer {
@@ -255,7 +282,7 @@ Panel {
       return root.todayMg + " mg today"
     }
     function undo(): void { root.undoLast() }
-    function settings(): void { root.openFromHotkey(); root.settingsOpen = true }
+    function settings(): void { root.openFromHotkey(); root.page = "settings" }
     function status(): string {
       return root.todayMg + " mg of " + root.dailyLimitMg + " (" + root.todayPercent
         + "%) · " + root.today.length + (root.today.length === 1 ? " drink · " : " drinks · ")
@@ -279,8 +306,8 @@ Panel {
       id: keyCatcher
       anchors.fill: parent
       blocked: bedtimeField.activeFocus
-      onReturnRequested: root.logLast()
-      onCloseRequested: root.close()
+      onReturnRequested: if (root.page === "main") root.logLast()
+      onCloseRequested: if (!root.goBack()) root.close()
       onTabRequested: function(direction) { root.switchPanel(direction) }
 
       Flickable {
@@ -297,39 +324,40 @@ Panel {
           width: scroll.width
           spacing: Style.space(14)
 
-          // ---- header ----
+          // ================= header =================
           Item {
             width: parent.width
-            height: headerRow.implicitHeight
+            height: Style.space(30)
 
             Row {
-              id: headerRow
-              spacing: Style.space(8)
               anchors.left: parent.left
+              anchors.verticalCenter: parent.verticalCenter
+              spacing: Style.space(8)
 
+              PanelActionButton {
+                visible: root.page !== "main"
+                anchors.verticalCenter: parent.verticalCenter
+                iconText: "󰁍"
+                tooltipText: "Back (Esc)"
+                foreground: root.foreground
+                fontFamily: root.fontFamily
+                onClicked: root.goBack()
+              }
               Text {
+                visible: root.page === "main"
+                anchors.verticalCenter: parent.verticalCenter
                 text: "󰅶"
                 color: root.accent
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.iconLarge
-                anchors.verticalCenter: parent.verticalCenter
               }
-              Column {
-                spacing: 0
+              Text {
                 anchors.verticalCenter: parent.verticalCenter
-                Text {
-                  text: "OmaCaffeine"
-                  color: root.foreground
-                  font.family: root.fontFamily
-                  font.pixelSize: Style.font.title
-                  font.bold: true
-                }
-                Text {
-                  text: "fuel for the kernel · half-life " + root.halfLife + " h"
-                  color: root.dim
-                  font.family: root.fontFamily
-                  font.pixelSize: Style.font.caption
-                }
+                text: root.page === "main" ? "OmaCaffeine" : "Settings"
+                color: root.foreground
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.title
+                font.bold: true
               }
             }
 
@@ -339,6 +367,7 @@ Panel {
               spacing: Style.space(4)
 
               PanelActionButton {
+                visible: root.page === "main"
                 iconText: "󰕌"
                 tooltipText: "Undo last drink"
                 foreground: root.foreground
@@ -348,11 +377,12 @@ Panel {
                 onClicked: root.undoLast()
               }
               PanelActionButton {
+                visible: root.page === "main"
                 iconText: "󰒓"
-                tooltipText: root.settingsOpen ? "Hide settings" : "Settings"
-                foreground: root.settingsOpen ? root.accent : root.foreground
+                tooltipText: "Settings"
+                foreground: root.foreground
                 fontFamily: root.fontFamily
-                onClicked: root.settingsOpen = !root.settingsOpen
+                onClicked: root.page = "settings"
               }
               PanelActionButton {
                 iconText: "✕"
@@ -364,8 +394,9 @@ Panel {
             }
           }
 
-          // ---- hero: cup + stats ----
+          // ================= main page =================
           Item {
+            visible: root.page === "main"
             width: parent.width
             height: Math.max(cup.height, stats.implicitHeight)
 
@@ -380,7 +411,7 @@ Panel {
               urgent: root.urgent
               fontFamily: root.fontFamily
               label: root.todayPercent + "%"
-              sublabel: root.todayMg + " / " + root.dailyLimitMg + " mg"
+              sublabel: root.overLimit ? "stack overflow" : root.todayMg + " / " + root.dailyLimitMg + " mg"
             }
 
             Column {
@@ -389,21 +420,20 @@ Panel {
               anchors.leftMargin: Style.space(14)
               anchors.right: parent.right
               anchors.verticalCenter: parent.verticalCenter
-              spacing: Style.space(8)
+              spacing: Style.space(10)
 
-              Text {
+              ScrollingText {
                 width: parent.width
                 text: root.firstLine
                 color: root.first ? root.foreground : root.accent
-                font.family: root.fontFamily
-                font.pixelSize: Style.font.body
-                font.bold: !root.first
-                wrapMode: Text.WordWrap
+                fontFamily: root.fontFamily
+                pixelSize: Style.font.body
+                bold: !root.first
               }
 
               Column {
                 width: parent.width
-                spacing: Style.space(3)
+                spacing: Style.space(5)
 
                 StatRow {
                   label: "Today"
@@ -414,7 +444,7 @@ Panel {
                 StatRow {
                   label: "In your system"
                   value: root.inBodyMg > 0
-                    ? root.inBodyMg + " mg · gone by ~" + Model.formatTimeFrom(root.caffeineFreeAt, root.now)
+                    ? root.inBodyMg + " mg · gone by ~" + Model.formatTimeFrom(root.caffeineFreeAt, root.now, root.timeFmt)
                     : "0 mg · clean slate"
                 }
                 StatRow {
@@ -425,35 +455,38 @@ Panel {
               }
 
               // Cut-off: information, not a control.
-              Row {
+              Item {
                 width: parent.width
-                spacing: Style.space(8)
+                height: Style.space(22)
 
                 Text {
+                  id: cutoffIcon
+                  anchors.left: parent.left
+                  anchors.verticalCenter: parent.verticalCenter
                   text: root.cutoff.status === "clear" ? "󰒲"
                     : (root.cutoff.status === "until" ? "󰔛" : "󰅜")
                   color: root.cutoffOk ? root.accent : root.urgent
                   font.family: root.fontFamily
-                  font.pixelSize: Style.font.iconLarge
-                  anchors.verticalCenter: parent.verticalCenter
+                  font.pixelSize: Style.font.icon
                 }
-                Text {
-                  width: parent.width - Style.space(30)
+                ScrollingText {
+                  anchors.left: cutoffIcon.right
+                  anchors.leftMargin: Style.space(8)
+                  anchors.right: parent.right
                   anchors.verticalCenter: parent.verticalCenter
                   text: root.statusLine
                   color: root.cutoffOk ? root.accent : root.urgent
-                  font.family: root.fontFamily
-                  font.pixelSize: Style.font.bodySmall
-                  font.bold: true
-                  wrapMode: Text.WordWrap
+                  fontFamily: root.fontFamily
+                  pixelSize: Style.font.bodySmall
+                  bold: true
                 }
               }
             }
           }
 
           Text {
+            visible: root.page === "main" && root.flash !== ""
             width: parent.width
-            visible: root.flash !== ""
             text: root.flash
             color: root.accent
             font.family: root.fontFamily
@@ -461,16 +494,17 @@ Panel {
             horizontalAlignment: Text.AlignHCenter
           }
 
-          // ---- drink grid ----
           PanelSectionHeader {
+            visible: root.page === "main"
             width: parent.width
-            text: "WHAT ARE YOU DRINKING?"
+            text: Model.heading(root.seed).toUpperCase()
             foreground: root.foreground
             fontFamily: root.fontFamily
           }
 
           Grid {
             id: drinkGrid
+            visible: root.page === "main"
             width: parent.width
             columns: 5
             columnSpacing: Style.space(6)
@@ -539,8 +573,8 @@ Panel {
             }
           }
 
-          // ---- timeline ----
           PanelSectionHeader {
+            visible: root.page === "main"
             width: parent.width
             text: "TIMELINE · INTAKE, HALF-LIFE AND BEDTIME"
             foreground: root.foreground
@@ -548,6 +582,7 @@ Panel {
           }
 
           CaffeineGraph {
+            visible: root.page === "main"
             width: parent.width
             height: Style.space(120)
             drinks: root.log.drinks
@@ -559,20 +594,20 @@ Panel {
             accent: root.accent
             urgent: root.urgent
             fontFamily: root.fontFamily
+            timeFormat: root.timeFmt
           }
 
-          // ---- today's log ----
           PanelSectionHeader {
+            visible: root.page === "main" && root.today.length > 0
             width: parent.width
-            visible: root.today.length > 0
             text: "TODAY'S LOG"
             foreground: root.foreground
             fontFamily: root.fontFamily
           }
 
           Column {
+            visible: root.page === "main" && root.today.length > 0
             width: parent.width
-            visible: root.today.length > 0
             spacing: Style.space(2)
 
             Repeater {
@@ -590,7 +625,7 @@ Panel {
 
                   Text {
                     width: Style.space(64)
-                    text: Model.formatTime(Model.drinkTime(modelData))
+                    text: Model.formatTime(Model.drinkTime(modelData), root.timeFmt)
                     color: root.dim
                     font.family: root.fontFamily
                     font.pixelSize: Style.font.bodySmall
@@ -633,19 +668,18 @@ Panel {
             }
           }
 
-          // ---- settings ----
-          PanelSectionHeader {
-            width: parent.width
-            visible: root.settingsOpen
-            text: "ASSUMPTIONS & SETTINGS"
-            foreground: root.foreground
-            fontFamily: root.fontFamily
-          }
-
+          // ================= settings page =================
           Column {
+            visible: root.page === "settings"
             width: parent.width
-            visible: root.settingsOpen
-            spacing: Style.space(12)
+            spacing: Style.space(14)
+
+            PanelSectionHeader {
+              width: parent.width
+              text: "YOU"
+              foreground: root.foreground
+              fontFamily: root.fontFamily
+            }
 
             Row {
               width: parent.width
@@ -697,13 +731,20 @@ Panel {
                 onChanged: function(v) { root.saveSetting("activity", v) }
               }
               Text {
+                width: parent.width
                 text: "Half-life used: " + root.halfLife + " h. Adults average about 5 h; moving around clears caffeine a little faster."
                 color: root.dim
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.caption
-                width: parent.width
                 wrapMode: Text.WordWrap
               }
+            }
+
+            PanelSectionHeader {
+              width: parent.width
+              text: "LIMITS"
+              foreground: root.foreground
+              fontFamily: root.fontFamily
             }
 
             Row {
@@ -755,19 +796,23 @@ Panel {
               }
             }
 
-            Row {
-              spacing: Style.space(8)
-              Button {
-                bordered: true
-                text: "Use recommended limit (" + root.recommendedDaily + " mg)"
-                foreground: root.foreground
-                accent: root.accent
-                fontFamily: root.fontFamily
-                fontSize: Style.font.bodySmall
-                enabled: root.dailyLimitMg !== root.recommendedDaily
-                opacity: enabled ? 1 : 0.5
-                onClicked: root.saveSetting("dailyLimitMg", root.recommendedDaily)
-              }
+            Button {
+              bordered: true
+              text: "Use recommended limit (" + root.recommendedDaily + " mg)"
+              foreground: root.foreground
+              accent: root.accent
+              fontFamily: root.fontFamily
+              fontSize: Style.font.bodySmall
+              enabled: root.dailyLimitMg !== root.recommendedDaily
+              opacity: enabled ? 1 : 0.5
+              onClicked: root.saveSetting("dailyLimitMg", root.recommendedDaily)
+            }
+
+            PanelSectionHeader {
+              width: parent.width
+              text: "BAR"
+              foreground: root.foreground
+              fontFamily: root.fontFamily
             }
 
             Column {
@@ -787,6 +832,14 @@ Panel {
                 fontFamily: root.fontFamily
                 onChanged: function(v) { root.saveSetting("barDisplay", v) }
               }
+              Text {
+                width: parent.width
+                text: "Times follow the Omarchy clock widget (" + (root.timeFmt === "HH:mm" ? "24-hour" : "12-hour") + ")."
+                color: root.dim
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+                wrapMode: Text.WordWrap
+              }
             }
 
             Text {
@@ -799,6 +852,7 @@ Panel {
             }
           }
 
+          // ================= footer =================
           PanelSeparator {
             width: parent.width
             foreground: root.foreground
@@ -806,7 +860,7 @@ Panel {
 
           Text {
             width: parent.width
-            text: Model.quote(root.quoteSeed)
+            text: Model.quote(root.seed)
             color: root.dim
             font.family: root.fontFamily
             font.pixelSize: Style.font.caption
@@ -819,33 +873,35 @@ Panel {
     }
   }
 
+  // Label column and value on a shared baseline; the value never wraps.
   component StatRow: Item {
     property string label: ""
     property string value: ""
     property color valueColor: root.foreground
     width: parent ? parent.width : 0
-    height: Math.max(labelText.implicitHeight, valueText.implicitHeight)
+    height: Math.max(labelText.implicitHeight, valueText.height)
 
     Text {
       id: labelText
       width: Style.space(112)
+      anchors.left: parent.left
+      anchors.baseline: valueText.baseline
       text: label.toUpperCase()
       color: root.dim
       font.family: root.fontFamily
       font.pixelSize: Style.font.caption
       font.letterSpacing: 0.5
-      anchors.verticalCenter: parent.verticalCenter
+      elide: Text.ElideRight
     }
-    Text {
+    ScrollingText {
       id: valueText
       anchors.left: labelText.right
       anchors.right: parent.right
+      anchors.top: parent.top
       text: value
       color: valueColor
-      font.family: root.fontFamily
-      font.pixelSize: Style.font.bodySmall
-      wrapMode: Text.WordWrap
-      anchors.verticalCenter: parent.verticalCenter
+      fontFamily: root.fontFamily
+      pixelSize: Style.font.bodySmall
     }
   }
 }

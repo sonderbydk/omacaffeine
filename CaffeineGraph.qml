@@ -18,6 +18,12 @@ Item {
   property color accent: Color.accent
   property color urgent: Color.urgent
   property string fontFamily: Style.font.family
+  property string timeFormat: ""
+
+  // New cells fade in when the drink list changes.
+  property var previousLevels: null
+  property var lastLevels: null
+  property real reveal: 1
 
   readonly property int cell: Math.max(3, Style.space(4))
   readonly property int gap: 1
@@ -41,7 +47,22 @@ Item {
     return { from: from, to: to }
   }
 
-  onDrinksChanged: canvas.requestPaint()
+  onDrinksChanged: {
+    previousLevels = lastLevels
+    reveal = 0
+    revealAnimation.restart()
+  }
+  onRevealChanged: canvas.requestPaint()
+
+  NumberAnimation {
+    id: revealAnimation
+    target: root
+    property: "reveal"
+    from: 0
+    to: 1
+    duration: 700
+    easing.type: Easing.OutCubic
+  }
   onNowChanged: canvas.requestPaint()
   onBedtimeChanged: canvas.requestPaint()
   onHalfLifeChanged: canvas.requestPaint()
@@ -86,23 +107,35 @@ Item {
       var nowT = root.now.getTime()
       var bedT = root.bedtime.getTime()
 
-      // Cells.
+      // Cells. Cells that were not lit before the last change fade in.
+      var prev = root.previousLevels && root.previousLevels.length === columns
+        ? root.previousLevels : null
+      var reveal = root.reveal
       for (var i = 0; i < columns; i++) {
         var colT = from + (i + 0.5) * stepMs
         var lit = Math.round(levels[i] / scaleMax * rows)
+        var litBefore = prev ? Math.round(prev[i] / scaleMax * rows) : lit
         var past = colT <= nowT
         var x = plotX + i * pitch
         for (var r = 0; r < rows; r++) {
           var y = plotH - (r + 1) * pitch + root.gap
           var on = r < lit
           if (on) {
-            ctx.fillStyle = past ? ac : Qt.rgba(ac.r, ac.g, ac.b, 0.38)
+            var alpha = past ? 1 : 0.38
+            if (r >= litBefore) alpha *= reveal
+            ctx.fillStyle = Qt.rgba(ac.r, ac.g, ac.b, alpha)
+            if (r >= litBefore && reveal < 1) {
+              ctx.fillStyle = Qt.rgba(fg.r, fg.g, fg.b, 0.05)
+              ctx.fillRect(x, y, root.cell, root.cell)
+              ctx.fillStyle = Qt.rgba(ac.r, ac.g, ac.b, alpha)
+            }
           } else {
             ctx.fillStyle = Qt.rgba(fg.r, fg.g, fg.b, 0.05)
           }
           ctx.fillRect(x, y, root.cell, root.cell)
         }
       }
+      root.lastLevels = levels
 
       // Bedtime limit: dashed line.
       var limitY = plotH - Math.round(root.bedtimeLimit / scaleMax * rows) * pitch
@@ -137,7 +170,7 @@ Item {
         ctx.fillText(label, lx, 2)
       }
       vline(nowT, ac, "now")
-      vline(bedT, Qt.rgba(fg.r, fg.g, fg.b, 0.85), "bed " + Model.formatTime(root.bedtime))
+      vline(bedT, Qt.rgba(fg.r, fg.g, fg.b, 0.85), "bed " + Model.formatTime(root.bedtime, root.timeFormat))
 
       // Drink ticks along the baseline.
       ctx.fillStyle = fg
@@ -167,7 +200,7 @@ Item {
         if (hd.getHours() % every !== 0) continue
         var hx = plotX + (ht - from) / span * plotW
         if (hx < plotX) continue
-        var hl = Model.formatTime(hd)
+        var hl = Model.formatTime(hd, root.timeFormat)
         var hw = ctx.measureText(hl).width
         if (hx + hw > width) continue
         ctx.fillText(hl, hx, plotH + 7)

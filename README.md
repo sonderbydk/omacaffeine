@@ -35,12 +35,16 @@ Requires Omarchy 4. No extra packages.
 - **Timeline.** A pixel graph in your theme's colours: caffeine in your
   system so far, the predicted decay from now, the bedtime limit and bedtime
   itself.
-- **Your locale.** Times follow your system's 12/24-hour setting and weight
-  is shown in pounds for imperial locales.
-- **Settings** live in the panel and on the bar entry: body weight (for the
-  recommended limit), typical activity (sitting, standing, moving around),
-  optimal bedtime, daily limit, allowed caffeine at bedtime, and whether the
-  bar shows an icon, milligrams or percent.
+- **Your clock, your units.** Times follow the Omarchy clock widget's format
+  (24-hour unless your clock shows AM/PM) and weight is shown in pounds for
+  imperial locales.
+- **Settings** on their own page (gear icon, Esc or Back returns): body
+  weight (for the recommended limit), typical activity (sitting, standing,
+  moving around), optimal bedtime, daily limit, allowed caffeine at bedtime,
+  and whether the bar shows an icon, milligrams or percent.
+- **Nerd mode is always on.** The drink grid greets you with a fresh heading
+  ("Choose your weapon, code warrior"), the footer serves a pun, and past
+  100 % the cup goes into stack overflow with a boiling crema.
 
 ## The model
 
