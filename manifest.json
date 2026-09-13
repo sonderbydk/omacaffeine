@@ -1,0 +1,96 @@
+{
+  "schemaVersion": 1,
+  "id": "io.github.sonderbydk.omacaffeine",
+  "name": "OmaCaffeine",
+  "version": "0.1.0",
+  "author": "Peter Sønderby",
+  "license": "MIT",
+  "description": "Caffeine tracker for the Omarchy bar: log your espresso, tea or energy drink, watch the cup fill up, and know when to stop so you still sleep tonight.",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "OmaCaffeine",
+    "description": "Caffeine tracker with a cup that fills up, half-life model and a bedtime cut-off.",
+    "category": "Health",
+    "aliases": [
+      "caffeine",
+      "coffee"
+    ],
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "bodyWeightKg": 80,
+      "activity": "Sitting",
+      "bedtime": "23:00",
+      "dailyLimitMg": 400,
+      "bedtimeLimitMg": 50,
+      "barDisplay": "Icon"
+    },
+    "schema": [
+      {
+        "key": "bodyWeightKg",
+        "type": "integer",
+        "label": "Body weight (kg)",
+        "min": 30,
+        "max": 250,
+        "step": 1,
+        "defaultValue": 80,
+        "description": "Used for the recommended daily limit (5.7 mg per kg, capped at 400 mg)."
+      },
+      {
+        "key": "activity",
+        "type": "enum",
+        "label": "Typical day",
+        "options": [
+          "Sitting",
+          "Standing",
+          "Moving around"
+        ],
+        "defaultValue": "Sitting",
+        "description": "Rough activity level. Moving clears caffeine a little faster than sitting at a desk."
+      },
+      {
+        "key": "bedtime",
+        "type": "string",
+        "label": "Optimal bedtime",
+        "defaultValue": "23:00",
+        "description": "24-hour HH:MM. The cut-off is computed so caffeine is under the bedtime limit by then."
+      },
+      {
+        "key": "dailyLimitMg",
+        "type": "integer",
+        "label": "Daily limit (mg)",
+        "min": 50,
+        "max": 1000,
+        "step": 10,
+        "defaultValue": 400,
+        "description": "The cup is full at this amount."
+      },
+      {
+        "key": "bedtimeLimitMg",
+        "type": "integer",
+        "label": "Caffeine left at bedtime (mg)",
+        "min": 0,
+        "max": 200,
+        "step": 5,
+        "defaultValue": 50,
+        "description": "How much may still be in your system at bedtime."
+      },
+      {
+        "key": "barDisplay",
+        "type": "enum",
+        "label": "Bar shows",
+        "options": [
+          "Icon",
+          "Milligrams",
+          "Percent"
+        ],
+        "defaultValue": "Icon"
+      }
+    ]
+  }
+}
