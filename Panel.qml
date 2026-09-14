@@ -435,6 +435,13 @@ Panel {
   // Pounds are stored as whole kilograms, and one pound is less than one
   // kilogram, so a single step in the field must still move the stored
   // value or the spinner would appear stuck.
+  // Click on the cup: the other view, with the liquid gliding to the new
+  // level instead of jumping.
+  function toggleCupMode() {
+    cup.flip()
+    saveSetting("cupMode", cupShowsBody ? "Today's intake" : "In your system")
+  }
+
   function saveWeight(shown) {
     if (!imperial) { saveSetting("bodyWeightKg", shown); return }
     var kg = Model.lbToKg(shown)
@@ -800,6 +807,20 @@ Panel {
               sublabel: root.cupLevel > 1 ? "stack overflow"
                 : (root.cupShowsBody ? root.inBodyMg + " mg in you"
                   : root.todayMg + " / " + root.dailyLimitMg + " mg")
+
+              MouseArea {
+                id: cupArea
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: root.toggleCupMode()
+              }
+              PanelToolTip {
+                visible: cupArea.containsMouse
+                text: root.cupShowsBody
+                  ? "In your system right now · click for today's intake"
+                  : "Today's intake · click for what is in your system now"
+              }
             }
 
             // The confirmation floats over the steam and fades, so nothing
@@ -1334,8 +1355,9 @@ Panel {
               fontFamily: root.fontFamily
             }
 
-            // One column per day: a small cup, the mg, the weekday, then the
-            // agents' output tokens as a bar on the same column.
+            // One column per day: a small cup, the mg, the weekday and the
+            // cups. The agents' tokens follow in a second, labelled row that
+            // lines up with the same columns.
             Row {
               id: weekRow
               width: parent.width
@@ -1348,7 +1370,6 @@ Panel {
                 Column {
                   required property var modelData
                   required property int index
-                  readonly property int dayTokens: root.weekTokens[index] || 0
                   width: weekRow.cellWidth
                   spacing: Style.space(3)
 
@@ -1386,32 +1407,76 @@ Panel {
                     font.family: root.fontFamily
                     font.pixelSize: Style.font.caption
                   }
-                  Item {
-                    width: parent.width
-                    height: Style.space(36)
-                    Rectangle {
-                      anchors.bottom: parent.bottom
-                      anchors.horizontalCenter: parent.horizontalCenter
-                      width: parent.width * 0.6
-                      height: Math.max(dayTokens > 0 ? 2 : 0, parent.height * dayTokens / root.weekTokenMax)
-                      radius: 1
-                      color: root.accent
-                      opacity: modelData.isToday ? 0.95 : 0.7
-                    }
-                    Rectangle {
-                      anchors.bottom: parent.bottom
+                }
+              }
+            }
+
+            // The token row: what your agents wrote each day, same columns.
+            Column {
+              width: parent.width
+              spacing: Style.space(4)
+
+              Row {
+                spacing: Style.space(6)
+                Text {
+                  anchors.verticalCenter: parent.verticalCenter
+                  text: "󰚩"
+                  color: root.accent
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.icon
+                }
+                Text {
+                  anchors.verticalCenter: parent.verticalCenter
+                  text: "OUTPUT TOKENS PER DAY · WHAT YOUR CODING AGENTS WROTE"
+                  color: root.dim
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.caption
+                  font.letterSpacing: 0.5
+                }
+              }
+
+              Row {
+                width: parent.width
+                spacing: weekRow.spacing
+
+                Repeater {
+                  model: root.week
+
+                  Column {
+                    required property var modelData
+                    required property int index
+                    readonly property int dayTokens: root.weekTokens[index] || 0
+                    width: weekRow.cellWidth
+                    spacing: Style.space(3)
+
+                    Item {
                       width: parent.width
-                      height: 1
-                      color: root.dim
-                      opacity: 0.4
+                      height: Style.space(36)
+                      Rectangle {
+                        anchors.bottom: parent.bottom
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        width: parent.width * 0.6
+                        height: Math.max(dayTokens > 0 ? 2 : 0, parent.height * dayTokens / root.weekTokenMax)
+                        radius: 1
+                        color: root.accent
+                        opacity: modelData.isToday ? 0.95 : 0.7
+                        Behavior on height { NumberAnimation { duration: 500; easing.type: Easing.OutCubic } }
+                      }
+                      Rectangle {
+                        anchors.bottom: parent.bottom
+                        width: parent.width
+                        height: 1
+                        color: root.dim
+                        opacity: 0.4
+                      }
                     }
-                  }
-                  Text {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    text: dayTokens > 0 ? Model.formatTokens(dayTokens) : "–"
-                    color: root.dim
-                    font.family: root.fontFamily
-                    font.pixelSize: Style.font.caption
+                    Text {
+                      anchors.horizontalCenter: parent.horizontalCenter
+                      text: dayTokens > 0 ? "󰚩 " + Model.formatTokens(dayTokens) : "–"
+                      color: modelData.isToday ? root.foreground : root.dim
+                      font.family: root.fontFamily
+                      font.pixelSize: Style.font.caption
+                    }
                   }
                 }
               }
@@ -1447,7 +1512,7 @@ Panel {
 
             PanelSectionHeader {
               width: parent.width
-              text: "CAFFEINE × TOKENS · OUTPUT PER ACTIVE HOUR, BY MG IN YOUR SYSTEM"
+              text: "CAFFEINE × 󰚩 TOKENS · OUTPUT PER ACTIVE HOUR, BY MG IN YOUR SYSTEM"
               foreground: root.foreground
               fontFamily: root.fontFamily
             }
@@ -1494,7 +1559,7 @@ Panel {
                     anchors.right: parent.right
                     anchors.verticalCenter: parent.verticalCenter
                     text: modelData.hours > 0
-                      ? Model.formatTokens(modelData.perHour) + " tok/h · " + modelData.hours + (modelData.hours === 1 ? " hour" : " hours")
+                      ? "󰚩 " + Model.formatTokens(modelData.perHour) + " tok/h · " + modelData.hours + (modelData.hours === 1 ? " hour" : " hours")
                       : "no hours at this level"
                     color: best ? root.foreground : root.dim
                     font.family: root.fontFamily

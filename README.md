@@ -42,8 +42,8 @@ cut-off time for one more of your usual.
 ## What you get
 
 **The cup.** A mug that fills with coffee as today's intake approaches your
-daily limit, or, if you prefer, with what is in your system right now so it
-drains between cups. Logging pours: a stream falls in, the surface swells and
+daily limit. Click it and it glides over to what is in your system right
+now, draining between cups; click again to go back. Logging pours: a stream falls in, the surface swells and
 settles, the number counts up. Past the limit it is a stack overflow: the
 crema boils in your theme's urgent colour and drips run down the outside.
 
@@ -67,8 +67,8 @@ did so far, the predicted decay from now, the bedtime limit and bedtime
 itself.
 
 **The week.** Seven small cups with the mg and cups per day, the average, the
-trend, and, under each day, the output tokens your coding agents produced
-(read locally from Claude Code and Codex transcripts). A second chart groups
+trend, and a second row of bars with the output tokens your coding agents
+wrote each day (read locally from Claude Code and Codex transcripts). A second chart groups
 your active hours by how much caffeine was in your system and shows the tokens
 per hour for each band, so you can find your sweet spot and see the
 correlation. Correlation, not causation, and the page says so.

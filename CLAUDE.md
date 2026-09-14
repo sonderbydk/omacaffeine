@@ -147,6 +147,11 @@ runs only when the week page shows (a good result is kept two minutes);
   and the graph's samples are gated by `root.opened` / cached.
 - IPC and hotkeys log "now"; only the drink grid passes the graph pick.
 - User strings are `Text.PlainText`, bounded, ≤ 40 chars; mg 0..1000.
+- Clicking the cup toggles `cupMode` (persisted setting) via
+  `toggleCupMode()`: `cup.flip()` first, so the level glides and the label
+  crossfades but nothing pours. The week page's token bars are their own
+  labelled row (robot glyph `󰚩` = "from your agents"); keep that glyph on
+  every token number so the unit is never ambiguous.
 
 ## Backlog (from the owner)
 

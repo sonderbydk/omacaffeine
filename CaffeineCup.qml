@@ -64,10 +64,20 @@ Item {
   }
   Component.onCompleted: Qt.callLater(function() { root.animate = true })
 
+  // A mode switch (today's intake <-> in your system) is not a new cup: the
+  // liquid glides and sloshes, but nothing pours and the label crossfades.
+  property bool switching: false
+  function flip() {
+    switching = true
+    labelFade.restart()
+    switchGuard.restart()
+  }
+  Timer { id: switchGuard; interval: 600; onTriggered: root.switching = false }
+
   onLevelChanged: {
     if (animate && animated && active && Math.abs(level - lastLevel) > 0.002) {
       splashAnimation.restart()
-      if (level > lastLevel) pourAnimation.restart()
+      if (level > lastLevel && !switching) pourAnimation.restart()
     }
     lastLevel = level
   }
@@ -407,8 +417,15 @@ Item {
     }
   }
 
+  SequentialAnimation {
+    id: labelFade
+    NumberAnimation { target: labelColumn; property: "opacity"; to: 0; duration: 140; easing.type: Easing.InQuad }
+    NumberAnimation { target: labelColumn; property: "opacity"; to: 1; duration: 420; easing.type: Easing.OutCubic }
+  }
+
   // Label centred on the cup body, hidden while the cup is empty.
   Column {
+    id: labelColumn
     visible: !root.empty
     x: root.bodyX + root.bodyW / 2 - width / 2
     y: root.bodyTop + root.bodyH / 2 - height / 2
