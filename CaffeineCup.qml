@@ -34,12 +34,15 @@ Item {
 
   // Geometry shared by the canvas and the centred label. The cup tapers a
   // little towards the bottom and sits left of centre so the handle has
-  // room on the right.
-  readonly property real bodyW: Math.min(width * 0.6, height * 0.6)
+  // room on the right. The sublabel lives under the saucer, where it never
+  // competes with the crema, so the cup reserves a line for it.
+  readonly property real sublabelRoom: sublabel !== "" ? Style.font.caption * 1.7 : 0
+  readonly property real cupH: height - sublabelRoom
+  readonly property real bodyW: Math.min(width * 0.6, cupH * 0.6)
   readonly property real bodyH: bodyW * 1.02
   readonly property real taper: bodyW * 0.07
   readonly property real bodyX: (width - bodyW) / 2 - bodyW * 0.1
-  readonly property real bodyBottom: height - Math.max(8, height * 0.09)
+  readonly property real bodyBottom: cupH - Math.max(8, cupH * 0.09)
   readonly property real bodyTop: bodyBottom - bodyH
   readonly property real lineW: Math.max(2, bodyW * 0.032)
 
@@ -441,15 +444,19 @@ Item {
       style: Text.Outline
       styleColor: Qt.rgba(0, 0, 0, root.shownLevel > 0.45 ? 0.35 : 0)
     }
-    Text {
-      anchors.horizontalCenter: parent.horizontalCenter
-      visible: root.sublabel !== ""
-      text: root.sublabel
-      color: root.overLimit ? root.urgent : (root.shownLevel > 0.3 ? "#f3e6d6" : Qt.darker(root.foreground, 1.4))
-      font.family: root.fontFamily
-      font.pixelSize: Style.font.caption
-      font.bold: root.overLimit
-      opacity: 0.95
-    }
+  }
+
+  // The sublabel under the saucer: theme foreground on the panel background,
+  // readable at any fill level. Fades with the big label on a mode switch.
+  Text {
+    visible: root.sublabel !== ""
+    x: root.bodyX + root.bodyW / 2 - width / 2
+    y: root.cupH + (root.sublabelRoom - height) / 2 + 1
+    text: root.sublabel
+    color: root.overLimit ? root.urgent : root.foreground
+    font.family: root.fontFamily
+    font.pixelSize: Style.font.caption
+    font.bold: root.overLimit
+    opacity: labelColumn.opacity
   }
 }

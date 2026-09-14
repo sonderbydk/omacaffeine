@@ -795,7 +795,7 @@ Panel {
             CaffeineCup {
               id: cup
               width: Style.space(160)
-              height: Style.space(160)
+              height: Style.space(172)
               anchors.left: parent.left
               anchors.verticalCenter: parent.verticalCenter
               level: root.cupLevel
@@ -805,8 +805,8 @@ Panel {
               fontFamily: root.fontFamily
               label: Math.round(cup.shownValue * 100) + "%"
               sublabel: root.cupLevel > 1 ? "stack overflow"
-                : (root.cupShowsBody ? root.inBodyMg + " mg in you"
-                  : root.todayMg + " / " + root.dailyLimitMg + " mg")
+                : (root.cupShowsBody ? root.inBodyMg + " mg in you now"
+                  : root.todayMg + " / " + root.dailyLimitMg + " mg today")
 
               MouseArea {
                 id: cupArea
