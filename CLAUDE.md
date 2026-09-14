@@ -120,7 +120,10 @@ band + bright edge + bubbles, then pour stream and splash droplets while
 `pour`/`splash` are non-zero, overflow drips outside the walls, then the
 outline, rim line, glaze highlight, single-stroke handle, elliptical saucer
 and two-pass gradient steam. `phase` ticks at 30 fps only while visible and
-steaming. Coffee colours are the one place fixed colours are allowed; the
+steaming. Only the big percentage sits inside the cup; the mg/mode line
+(`sublabel`) is drawn under the saucer in the theme foreground, and the cup
+reserves `sublabelRoom` for it (the panel gives the cup 172 px for that).
+Peter found the in-cup caption unreadable on the crema; do not move it back. Coffee colours are the one place fixed colours are allowed; the
 overflow tint and the steam use the theme's urgent/foreground.
 
 ## Week page and the token analysis
