@@ -1,4 +1,9 @@
-# OmaCaffeine — notes for Claude
+# OmaCaffeine — developer notes
+
+Kept as `dev/NOTES.md` on purpose: the Omarchy plugin marketplace blocks
+review when the shipped tree contains `CLAUDE.md` (an agent-instruction
+file inside the installed plugin scope). The local, git-ignored `CLAUDE.md`
+just imports this file with `@dev/NOTES.md`, so Claude Code still loads it.
 
 Caffeine tracker plugin for the Omarchy bar (Quickshell/QML, no build step).
 Built together with Peter on 2026-09-13 in Claude Code session

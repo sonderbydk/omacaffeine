@@ -139,6 +139,6 @@ o.bind("SUPER + SHIFT + C", "Log espresso",
 
 No build step. `dev/harness.sh` renders the components in a standalone
 Quickshell window; `dev/model-test.js` is a Node smoke test for the model.
-See `CLAUDE.md` for the layout and the deploy loop.
+See `dev/NOTES.md` for the layout and the deploy loop.
 
 MIT licensed. Brewed with Claude Code.
