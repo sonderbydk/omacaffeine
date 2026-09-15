@@ -243,7 +243,9 @@ Item {
       vline(bedT, Qt.rgba(fg.r, fg.g, fg.b, 0.85), "bed " + Model.formatTime(root.bedtime, root.timeFormat))
 
       // Backdating markers: the pointer's time (dim) and the picked time
-      // (accent, solid) sit low so they never fight the "now" label.
+      // (accent, solid). The label rides just above the lit cells under it
+      // so it is never hidden behind the curve, and stays below the "now"
+      // and bedtime labels along the top.
       function marker(date, color, solid) {
         if (!date) return
         var tt = date.getTime()
@@ -263,7 +265,17 @@ Item {
         var label = (solid ? "log at " : "") + Model.formatTime(date, root.timeFormat)
         var lw = ctx.measureText(label).width
         var lx = mx + 4 + lw > width ? mx - lw - 4 : mx + 4
-        ctx.fillText(label, lx, plotH - 2)
+        // Tallest column under the label's span decides how high it sits.
+        var c0 = Math.max(0, Math.floor((lx - plotX) / pitch))
+        var c1 = Math.min(columns - 1, Math.floor((lx + lw - plotX) / pitch))
+        var tallest = 0
+        for (var lc = c0; lc <= c1; lc++) {
+          var lit = Math.round(levels[lc] / scaleMax * rows)
+          if (lit > tallest) tallest = lit
+        }
+        var top = plotH - tallest * pitch
+        var ly = Math.max(Style.font.caption + 8, top - 2)
+        ctx.fillText(label, lx, ly)
       }
       if (root.pickTime) marker(root.pickTime, ac, true)
       else if (root.hoverTime) marker(root.hoverTime, Qt.rgba(fg.r, fg.g, fg.b, 0.7), false)
