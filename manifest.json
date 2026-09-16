@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "id": "io.github.sonderbydk.omacaffeine",
   "name": "OmaCaffeine",
-  "version": "0.4.2",
-  "author": "Peter Sønderby",
+  "version": "0.4.3",
+  "author": "Peter Sønderby-Wagner",
   "license": "MIT",
   "description": "Track your caffeine so you peak while you code and still sleep tonight: log a cup, watch the mug fill, get a bedtime cut-off, and see how your week's milligrams line up with your coding agents' tokens. Made with love for coders, coffee and Omarchy.",
   "kinds": [
