@@ -484,9 +484,33 @@ Panel {
     }
   }
 
+  // The transcript scan is a child of the long-lived shell and crosses a
+  // sensitive local-data boundary, so it never trusts the inherited
+  // environment: fixed system interpreter in isolated mode (-I ignores
+  // PYTHON* variables and user site-packages), a scrubbed environment with
+  // only what the script needs, and a watchdog that sends TERM after 20 s
+  // and KILL 5 s later. The script itself also stops at its own budget.
+  readonly property var tokensEnvironment: {
+    var env = {
+      HOME: Quickshell.env("HOME"),
+      PATH: "/usr/bin:/bin",
+      XDG_CONFIG_HOME: configDir,
+      XDG_STATE_HOME: stateDir,
+      LANG: "C.UTF-8",
+      LC_ALL: "C.UTF-8",
+      PYTHONDONTWRITEBYTECODE: "1"
+    }
+    var tz = Quickshell.env("TZ")
+    if (tz) env.TZ = tz
+    return env
+  }
+
   Process {
     id: tokensProcess
-    command: ["python3", root.pluginDir + "/tokens.py", "8"]
+    command: ["/usr/bin/python3", "-I", root.pluginDir + "/tokens.py", "8"]
+    clearEnvironment: true
+    environment: root.tokensEnvironment
+    workingDirectory: root.pluginDir
     stdout: StdioCollector {
       onStreamFinished: {
         var parsed = null
@@ -501,10 +525,29 @@ Panel {
         }
       }
     }
-    onExited: function(code) {
-      if (code !== 0) root.tokensState = "failed"
+    onStarted: tokensTerm.restart()
+    onExited: function(code, status) {
+      tokensTerm.stop()
+      tokensKill.stop()
+      if (code !== 0 || status !== 0) root.tokensState = "failed"
     }
   }
+  Timer {
+    id: tokensTerm
+    interval: 20000
+    onTriggered: {
+      if (!tokensProcess.running) return
+      console.warn("omacaffeine: tokens.py exceeded 20 s, sending SIGTERM")
+      tokensProcess.signal(15)
+      tokensKill.restart()
+    }
+  }
+  Timer {
+    id: tokensKill
+    interval: 5000
+    onTriggered: if (tokensProcess.running) tokensProcess.signal(9)
+  }
+  Component.onDestruction: if (tokensProcess.running) tokensProcess.signal(9)
 
   FileView {
     id: logFile
@@ -1495,7 +1538,7 @@ Panel {
               StatRow {
                 label: "Tokens"
                 value: root.tokensState === "failed"
-                  ? "tokens.py failed · is python3 installed?"
+                  ? "tokens.py failed · needs /usr/bin/python3"
                   : (root.tokensState === "loading" && root.weekTokenTotal === 0 ? "Scanning transcripts…"
                   : (root.weekTokenTotal > 0
                     ? Model.formatTokens(root.weekTokenTotal) + " output tokens · "

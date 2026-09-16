@@ -133,7 +133,10 @@ o.bind("SUPER + SHIFT + C", "Log espresso",
 - The week page's token counts come from `~/.claude/projects/**/*.jsonl` and
   `~/.codex/sessions/**/*.jsonl`, read locally by the bundled `tokens.py`
   (Python 3, part of every Omarchy install). Only per-hour token totals are
-  kept in memory; no transcript content is stored or sent anywhere.
+  kept in memory; no transcript content is stored or sent anywhere. The
+  script runs as `/usr/bin/python3 -I` with a cleared environment (only
+  HOME, a fixed system PATH, XDG dirs, locale and TZ), stops itself after
+  10 s, and the panel sends TERM after 20 s and KILL 5 s later.
 
 ## Developing
 

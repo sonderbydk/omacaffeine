@@ -9,20 +9,45 @@ session rollouts (~/.codex/sessions/**/*.jsonl) and prints one JSON object:
 
 Keys are local time, bucketed by hour; values are output tokens (thinking
 included). `sources` counts the files that contributed at least one token
-inside the window; `skipped` counts files that could not be read. Only
-files touched within the requested number of days are opened.
+inside the window; `skipped` counts files that could not be read; `partial`
+is true when the scan stopped early. Only files touched within the
+requested number of days are opened.
+
+The panel runs this with /usr/bin/python3 -I, a cleared environment (HOME,
+PATH, XDG_*, LANG, optional TZ) and a 20 s watchdog. The script keeps its
+own budget as well: after BUDGET_SECONDS, or on SIGTERM, it stops scanning
+and prints what it has, so the caller always gets valid JSON.
 
 Usage: tokens.py [days]      (default 8)
 """
 import json
 import os
+import signal
 import sys
 import time
 from datetime import datetime, timezone
 
 DAYS = int(sys.argv[1]) if len(sys.argv) > 1 and sys.argv[1].isdigit() else 8
+BUDGET_SECONDS = 10.0
+START = time.monotonic()
 CUTOFF = time.time() - DAYS * 86400
-HOME = os.path.expanduser("~")
+# Only the explicit HOME the caller passes; no pwd-database fallback.
+HOME = os.environ.get("HOME", "")
+
+stop = False
+
+
+def request_stop(_signum, _frame):
+    global stop
+    stop = True
+
+
+signal.signal(signal.SIGTERM, request_stop)
+signal.signal(signal.SIGINT, request_stop)
+
+
+def out_of_time():
+    return stop or time.monotonic() - START > BUDGET_SECONDS
 
 hours = {}
 sources = {"claude": 0, "codex": 0}
@@ -74,6 +99,8 @@ def claude(path):
     hit = False
     with open(path, encoding="utf-8", errors="replace") as fh:
         for line in fh:
+            if out_of_time():
+                break
             if '"output_tokens"' not in line:
                 continue
             try:
@@ -109,6 +136,8 @@ def codex(path):
     hit = False
     with open(path, encoding="utf-8", errors="replace") as fh:
         for line in fh:
+            if out_of_time():
+                break
             if '"token_count"' not in line:
                 continue
             try:
@@ -134,6 +163,8 @@ def codex(path):
 def scan(root, reader, name):
     global skipped
     for path in recent_files(root):
+        if out_of_time():
+            return
         try:
             if reader(path):
                 sources[name] += 1
@@ -141,8 +172,9 @@ def scan(root, reader, name):
             skipped += 1
 
 
-scan(os.path.join(HOME, ".claude", "projects"), claude, "claude")
-scan(os.path.join(HOME, ".codex", "sessions"), codex, "codex")
+if HOME and os.path.isdir(HOME):
+    scan(os.path.join(HOME, ".claude", "projects"), claude, "claude")
+    scan(os.path.join(HOME, ".codex", "sessions"), codex, "codex")
 
-json.dump({"hours": hours, "sources": sources, "skipped": skipped}, sys.stdout,
-          separators=(",", ":"))
+json.dump({"hours": hours, "sources": sources, "skipped": skipped,
+           "partial": out_of_time()}, sys.stdout, separators=(",", ":"))

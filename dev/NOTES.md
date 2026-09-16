@@ -155,6 +155,11 @@ runs only when the week page shows (a good result is kept two minutes);
   and the graph's samples are gated by `root.opened` / cached.
 - IPC and hotkeys log "now"; only the drink grid passes the graph pick.
 - User strings are `Text.PlainText`, bounded, ≤ 40 chars; mg 0..1000.
+- `tokens.py` is launched as `/usr/bin/python3 -I` with
+  `clearEnvironment: true` and an explicit minimal environment (marketplace
+  review asked for exactly this: no ambient PATH/env across the transcript
+  boundary). Watchdog: TERM at 20 s, KILL at 25 s; the script has its own
+  10 s budget and answers SIGTERM with valid partial JSON. Keep all three.
 - Clicking the cup toggles `cupMode` (persisted setting) via
   `toggleCupMode()`: `cup.flip()` first, so the level glides and the label
   crossfades but nothing pours. The week page's token bars are their own
