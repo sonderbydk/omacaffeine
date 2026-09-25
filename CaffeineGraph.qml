@@ -15,27 +15,38 @@ Item {
   property real halfLife: 5
   property int bedtimeLimit: 100
   property color foreground: Color.foreground
+  property color background: Color.background
   property color accent: Color.accent
   property color urgent: Color.urgent
   property string fontFamily: Style.font.family
   property string timeFormat: ""
 
-  // Backdating: hovering shows the time under the pointer, a click emits
-  // `picked` with that time (snapped to five minutes, never after now).
-  // `pickTime` is the time the owner is currently logging at, drawn as a
-  // marker until it is cleared.
+  // Hovering shows the time under the pointer and the level in the body at
+  // that time, past or future, so the forecast can be read off the graph.
+  // Backdating: a click emits `picked` with that time (snapped to five
+  // minutes) but only up to now; clicks in the future emit null. `pickTime`
+  // is the time the owner is currently logging at, drawn as a marker until
+  // it is cleared.
   property bool pickable: true
   property var pickTime: null
   property var hoverTime: null
   signal picked(var time)
 
-  function timeAt(x) {
+  // Time under x anywhere in the window, snapped to five minutes.
+  function hoverAt(x) {
     var from = window.from.getTime(), to = window.to.getTime()
     var plotW = width - axisLeft
-    if (plotW <= 0 || x < axisLeft) return null
+    if (plotW <= 0 || x < axisLeft || x > width) return null
     var t = from + (x - axisLeft) / plotW * (to - from)
-    if (t > now.getTime()) return null
-    return Model.snapTime(new Date(t), now, 5)
+    var step = 5 * 60000
+    return new Date(Math.min(to, Math.round(t / step) * step))
+  }
+
+  // Time under x for logging: null in the future.
+  function timeAt(x) {
+    var t = hoverAt(x)
+    if (!t || t.getTime() > now.getTime()) return null
+    return Model.snapTime(t, now, 5)
   }
 
   // New cells fade in when the drink list changes.
@@ -125,6 +136,7 @@ Item {
   onHalfLifeChanged: canvas.requestPaint()
   onBedtimeLimitChanged: canvas.requestPaint()
   onForegroundChanged: canvas.requestPaint()
+  onBackgroundChanged: canvas.requestPaint()
   onAccentChanged: canvas.requestPaint()
   onUrgentChanged: canvas.requestPaint()
   onFontFamilyChanged: canvas.requestPaint()
@@ -139,9 +151,10 @@ Item {
     anchors.fill: parent
     enabled: root.pickable
     hoverEnabled: true
-    cursorShape: root.hoverTime ? Qt.PointingHandCursor : Qt.ArrowCursor
+    cursorShape: root.hoverTime && root.hoverTime.getTime() <= root.now.getTime()
+      ? Qt.PointingHandCursor : Qt.ArrowCursor
     onPositionChanged: function(mouse) {
-      var t = root.timeAt(mouse.x)
+      var t = root.hoverAt(mouse.x)
       var same = (t === null && root.hoverTime === null)
         || (t !== null && root.hoverTime !== null && t.getTime() === root.hoverTime.getTime())
       if (!same) root.hoverTime = t
@@ -242,8 +255,10 @@ Item {
       vline(nowT, ac, "now")
       vline(bedT, Qt.rgba(fg.r, fg.g, fg.b, 0.85), "bed " + Model.formatTime(root.bedtime, root.timeFormat))
 
-      // Backdating markers: the pointer's time (dim) and the picked time
-      // (accent, solid) sit low so they never fight the "now" label.
+      // Markers: the pointer's time and level (dim) and the picked time
+      // (accent, solid). The label rides just above the lit cells under it
+      // so it is never hidden behind the curve, and stays below the "now"
+      // and bedtime labels along the top.
       function marker(date, color, solid) {
         if (!date) return
         var tt = date.getTime()
@@ -260,10 +275,43 @@ Item {
         ctx.fillStyle = color
         ctx.font = (solid ? "bold " : "") + Style.font.caption + "px " + root.fontFamily
         ctx.textBaseline = "bottom"
-        var label = (solid ? "log at " : "") + Model.formatTime(date, root.timeFormat)
+        var label = solid
+          ? "log at " + Model.formatTime(date, root.timeFormat)
+          : Model.formatTime(date, root.timeFormat) + " · "
+            + Math.round(Model.inBody(root.drinks, date, root.halfLife)) + " mg"
         var lw = ctx.measureText(label).width
-        var lx = mx + 4 + lw > width ? mx - lw - 4 : mx + 4
-        ctx.fillText(label, lx, plotH - 2)
+        // The tallest column under the label's span decides how high it
+        // sits; of the two sides of the marker, take the one with the lower
+        // curve so the label stays clear of the "now" label when it can.
+        function topAt(x0) {
+          var c0 = Math.max(0, Math.floor((x0 - plotX) / pitch))
+          var c1 = Math.min(columns - 1, Math.floor((x0 + lw - plotX) / pitch))
+          var tallest = 0
+          for (var lc = c0; lc <= c1; lc++) {
+            var lit = Math.round(levels[lc] / scaleMax * rows)
+            if (lit > tallest) tallest = lit
+          }
+          return plotH - tallest * pitch
+        }
+        var rightX = mx + 4, leftX = mx - lw - 4
+        var lx = rightX, top = topAt(rightX)
+        var rightFits = rightX + lw <= width, leftFits = leftX >= plotX
+        if (!rightFits && leftFits) { lx = leftX; top = topAt(leftX) }
+        else if (rightFits && leftFits) {
+          var leftTop = topAt(leftX)
+          if (leftTop > top) { lx = leftX; top = leftTop }
+        }
+        var minY = Style.font.caption + 8
+        var ly = Math.max(minY, top - 2)
+        // Forced into the top band, the label can land on the cells or the
+        // "now" label; knock out a background behind it so it stays legible.
+        if (top - 2 < minY) {
+          var bg = root.background
+          ctx.fillStyle = Qt.rgba(bg.r, bg.g, bg.b, 0.85)
+          ctx.fillRect(lx - 2, ly - Style.font.caption - 2, lw + 4, Style.font.caption + 4)
+          ctx.fillStyle = color
+        }
+        ctx.fillText(label, lx, ly)
       }
       if (root.pickTime) marker(root.pickTime, ac, true)
       else if (root.hoverTime) marker(root.hoverTime, Qt.rgba(fg.r, fg.g, fg.b, 0.7), false)
