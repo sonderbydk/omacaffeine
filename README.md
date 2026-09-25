@@ -64,7 +64,7 @@ may still be in your system when you go to bed; the model does the rest.
 
 **The timeline.** A pixel graph of caffeine in your body: what today's cups
 did so far, the predicted decay from now, the bedtime limit and bedtime
-itself.
+itself. Hover anywhere to read the time and the modelled mg at that point.
 
 **The week.** Seven small cups with the mg and cups per day, the average, the
 trend, and a second row of bars with the output tokens your coding agents

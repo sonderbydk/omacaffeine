@@ -1086,6 +1086,7 @@ Panel {
             halfLife: root.halfLife
             bedtimeLimit: root.bedtimeLimitMg
             foreground: root.foreground
+            background: Color.popups.background   // the card the graph sits on
             accent: root.accent
             urgent: root.urgent
             fontFamily: root.fontFamily

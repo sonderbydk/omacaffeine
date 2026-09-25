@@ -20,7 +20,7 @@ the full history of decisions; this file holds what you need to keep going.
 | `Model.js` | Pure functions: presets, drinks config (custom drinks + mg overrides), half-life model, cut-off, week totals, token/caffeine analysis, formatting, log (de)serialisation, headings/quotes. Test-friendly. |
 | `tokens.py` | Runtime script: output tokens per local hour from `~/.claude/projects/**/*.jsonl` (dedupe by message id) and `~/.codex/sessions/**/*.jsonl` (delta of cumulative totals). Run by a `Process` from the panel, ~0.3 s. |
 | `CaffeineCup.qml` | Canvas mug that fills to `level`; `shownValue` glides (owners build the counting label from it); pour + splash on increase; overflow state past 1.0; `animated: false` for the small week cups. |
-| `CaffeineGraph.qml` | Pixel timeline; new/removed cells fade. |
+| `CaffeineGraph.qml` | Pixel timeline; new/removed cells fade. Hover anywhere shows time + modelled mg above the curve (contributed by joelgaff in PR #1); pass `background` = the card colour for the label knockout. |
 | `DrinkIcon.qml` | Outline icons as SVG path strings in a 24×24 box, `QtQuick.Shapes`. |
 | `ScrollingText.qml` | Single-line text that glides instead of wrapping. |
 | `dev/model-test.js` | Node smoke test for `Model.js`: `TZ=Europe/Copenhagen node dev/model-test.js <(sed 1d Model.js)`. Add a case when you touch the model. |
